@@ -1139,6 +1139,51 @@ def librecrawl_stop_crawl() -> dict:
     return call("POST", "/api/stop_crawl")
 
 
+@mcp.tool()
+def librecrawl_pause_crawl() -> dict:
+    """Pause the currently running crawl. Resume with librecrawl_resume_crawl()."""
+    return call("POST", "/api/pause_crawl")
+
+
+@mcp.tool()
+def librecrawl_resume_crawl() -> dict:
+    """Resume a paused crawl."""
+    return call("POST", "/api/resume_crawl")
+
+
+@mcp.tool()
+def librecrawl_get_settings() -> dict:
+    """
+    Get current crawler settings (maxUrls, maxDepth, crawlDelay, JS rendering, etc).
+    Useful to confirm settings before starting a crawl.
+    """
+    return call("GET", "/api/get_settings")
+
+
+@mcp.tool()
+def librecrawl_filter_issues(patterns: list) -> dict:
+    """
+    Filter crawl issues by exclusion patterns — useful to suppress known false positives.
+    Pass a list of URL patterns or issue types to exclude from results.
+
+    Args:
+        patterns: List of strings to exclude (e.g. ["/wp-admin/", "cdn.example.com"])
+    """
+    return call("POST", "/api/filter_issues", json={"patterns": patterns})
+
+
+@mcp.tool()
+def librecrawl_visualization_data() -> dict:
+    """
+    Get site link graph data from the current crawl — nodes (pages) and edges (links).
+    Useful for understanding site architecture, identifying link clusters, and finding
+    isolated sections of the site that Googlebot may not reach efficiently.
+
+    Returns: nodes list (url, depth, status) and edges list (source → target links).
+    """
+    return call("GET", "/api/visualization_data")
+
+
 # ── PageSpeed Insights ────────────────────────────────────────────────────────
 
 def _fetch_psi(url: str, strategy: str = "mobile") -> dict:
