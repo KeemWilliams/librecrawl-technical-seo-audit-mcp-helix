@@ -102,45 +102,34 @@ Connect any Google Search Console MCP (we recommend [mcp-gsc](https://github.com
 
 ---
 
-## Install (1 command)
+## Quick Start — Your First Audit
+
+This guide takes you from zero to a full SEO audit report in under 10 minutes.
+
+### Step 1 — Install (1 command)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/adityaarsharma/librecrawl-mcp/main/install.sh | bash
 ```
 
-**Requires:** Docker, Python 3.9+, Node.js (for PM2), Git
+What happens:
+- LibreCrawl Docker image is pulled and built (~5–8 min, first run only)
+- Python MCP server is installed and registered with PM2
+- Both services start automatically and survive reboots
 
-The installer:
-1. Clones LibreCrawl and builds the Docker image (~5–8 min first run)
-2. Applies all required patches to `main.py` for full DB persistence
-3. Installs the Python MCP server in an isolated venv
-4. Registers both services with PM2 (`restart: always`, survives reboots)
-5. Prompts for optional Google PageSpeed Insights API key (free, 25k req/day)
+You'll be asked for a Google PageSpeed Insights API key (optional but recommended — free at [console.cloud.google.com](https://console.cloud.google.com), 25k req/day).
 
-### Custom install directory or ports
-
+**Verify everything is running:**
 ```bash
-INSTALL_DIR=/opt/librecrawl-mcp LIBRECRAWL_PORT=5080 MCP_PORT=5081 bash install.sh
+pm2 status librecrawl-mcp          # MCP server — should show "online"
+docker ps | grep librecrawl        # LibreCrawl — should show "healthy"
 ```
 
 ---
 
-## Add to Claude
+### Step 2 — Add to Claude
 
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "librecrawl": {
-      "type": "http",
-      "url": "http://127.0.0.1:5081/mcp"
-    }
-  }
-}
-```
-
-**Claude Code** (`~/.claude/settings.json`):
+**Claude Desktop** — edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -153,7 +142,97 @@ INSTALL_DIR=/opt/librecrawl-mcp LIBRECRAWL_PORT=5080 MCP_PORT=5081 bash install.
 }
 ```
 
-**Remote server** (via Nginx + mcp-remote):
+**Claude Code** — edit `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "librecrawl": {
+      "type": "http",
+      "url": "http://127.0.0.1:5081/mcp"
+    }
+  }
+}
+```
+
+Restart Claude Desktop after saving. In Claude Code, the MCP is live immediately.
+
+---
+
+### Step 3 — Run your first audit
+
+Open Claude and type:
+
+```
+Audit https://example.com and give me a full SEO report
+```
+
+Claude will:
+1. Crawl the entire site (runs in background, progress visible in `pm2 logs librecrawl-mcp`)
+2. Run site-level checks (robots.txt, sitemap, HTTPS, www redirect)
+3. Analyse all 35+ SEO checks across every crawled page
+4. Save a Markdown report to `~/librecrawl-reports/example.com-YYYYMMDD-HHMMSS.md`
+5. Return a summary of the top issues with a prioritised fix checklist
+
+**For large sites** (1,000+ pages), the crawl can run up to 2 hours. To cap it:
+```
+Audit https://bigsite.com — limit to 500 pages
+```
+
+---
+
+### Step 4 — Read your report
+
+The report is saved at `~/librecrawl-reports/`. Each report has:
+
+| Section | What it shows |
+|---------|--------------|
+| Scorecard | Pass/fail for every check at a glance |
+| Critical issues | Broken pages (404/5xx) + which pages link to them |
+| On-page warnings | Missing titles, duplicate metas, thin content, slow pages |
+| Canonical analysis | Missing, self, non-self, broken canonical URLs |
+| Orphan pages | Pages with zero inbound links — Googlebot may never find them |
+| Redirect chains | Multi-hop chains (A→B→C) eating crawl budget |
+| Images | Pages with missing alt text, broken image references |
+| Analytics coverage | Pages not tracked by GA4 or GTM |
+| Fix checklist | P1→Pn priority tasks — paste straight into Jira/ClickUp |
+
+---
+
+### Step 5 — Add GSC errors (optional)
+
+Install a Google Search Console MCP ([mcp-gsc](https://github.com/AminForou/mcp-gsc) is recommended), then ask:
+
+```
+Audit https://example.com and include GSC indexing errors
+```
+
+Claude will merge your real GSC coverage errors — 404s in sitemap, soft 404s, server errors, crawl blocks — into the audit report automatically.
+
+---
+
+### Other things to ask
+
+```
+Check Core Web Vitals on the top 10 pages of example.com
+```
+```
+Does example.com have schema markup? What rich results is it missing?
+```
+```
+Run an internal links analysis — which pages are orphans?
+```
+```
+Quick site health check for example.com — no crawl needed
+```
+
+---
+
+## Remote server setup (optional)
+
+For local installs see the Quick Start above. To expose your LibreCrawl MCP over Nginx (e.g. on a VPS so your whole team can use it):
+
+**Claude config** (via mcp-remote):
 
 ```json
 {
@@ -281,22 +360,6 @@ The GSC section includes: indexing errors with fix hints, crawl errors, manual a
 | `librecrawl_schema_check` | Schema.org / JSON-LD for one URL — rich result mapping |
 | `librecrawl_schema_audit` | Schema coverage across multiple URLs |
 | `librecrawl_append_gsc_section` | Merge GSC indexing errors into any audit report |
-
----
-
-## Usage
-
-Once connected, just ask:
-
-> *"Audit uichemy.com and give me a full SEO report"*
-
-Claude will crawl the site, run site-level checks, generate a Markdown report at `~/librecrawl-reports/uichemy.com-{timestamp}.md`, and summarise the top issues.
-
-> *"Check Core Web Vitals on the top 10 pages"*
-
-> *"Does uichemy.com have schema markup? What rich results is it missing?"*
-
-> *"Run a full audit and include GSC errors"* (requires GSC MCP)
 
 ---
 
