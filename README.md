@@ -258,7 +258,7 @@ The GSC section includes: indexing errors with fix hints, crawl errors, manual a
 
 ---
 
-## Tools (13 total)
+## Tools (19 total)
 
 | Tool | What it does |
 |------|-------------|
