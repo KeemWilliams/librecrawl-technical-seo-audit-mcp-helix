@@ -1069,28 +1069,37 @@ def _build_report(pages: list, base_url: str, crawl_id: int,
 # ── MCP Tools ─────────────────────────────────────────────────────────────────
 
 @mcp.tool()
-def librecrawl_audit(url: str, max_pages: int = 500) -> dict:
+def librecrawl_audit(url: str, max_pages: int = 0) -> dict:
     """
-    Full SEO audit in one call — crawls the site, runs site-level checks
-    (robots.txt, sitemap, HTTPS, www), exports results, and saves a
-    Markdown report file covering 20+ check categories.
+    Full SEO / technical site audit in one call — the Screaming Frog alternative.
 
-    Use this for 'audit X' requests. Returns report_path + summary.
-    For step-by-step control use librecrawl_start_crawl instead.
+    Crawls the entire site, runs 35+ checks across 17 categories (broken links,
+    duplicate titles, missing H1, thin content, canonical issues, redirect chains,
+    orphan pages, image alt text, Open Graph, hreflang, analytics coverage, and
+    more), then saves a structured Markdown report with a prioritised fix checklist.
+
+    USE THIS when asked to:
+    - "audit [site]", "run an SEO audit", "technical SEO check", "site health check"
+    - "find broken links / 404s", "check title tags / meta descriptions"
+    - "analyse internal linking", "find orphan pages", "crawl [site]"
+    - "give me a Screaming Frog report", "full site analysis"
 
     Args:
         url:       Full URL to crawl (e.g. https://example.com)
-        max_pages: Max pages (default 500)
+        max_pages: Max pages to crawl. 0 = unlimited (default). Set e.g. 500 to
+                   cap a large site. Crawls up to 2 hours before timing out.
     """
     # Start crawl
-    call("POST", "/api/save_settings", json={
+    settings = {
         "enableJavaScript": False,
-        "maxUrls": max_pages,
         "maxDepth": 5,
         "crawlDelay": 0.5,
         "followRedirects": True,
         "crawlExternalLinks": False,
-    })
+    }
+    if max_pages > 0:
+        settings["maxUrls"] = max_pages
+    call("POST", "/api/save_settings", json=settings)
     result   = call("POST", "/api/start_crawl", json={"url": url})
     crawl_id = result.get("crawl_id")
 
@@ -1100,8 +1109,8 @@ def librecrawl_audit(url: str, max_pages: int = 500) -> dict:
     # Run site-level checks in parallel with crawl (no wait needed)
     site_data = _site_check(url)
 
-    # Poll until done (max 20 min)
-    deadline = time.time() + 1200
+    # Poll until done (max 2 hrs — large sites with 1000+ pages can take >20 min)
+    deadline = time.time() + 7200
     crawled  = 0
     while time.time() < deadline:
         time.sleep(8)
@@ -1187,14 +1196,16 @@ def librecrawl_audit(url: str, max_pages: int = 500) -> dict:
 @mcp.tool()
 def librecrawl_site_check(url: str) -> dict:
     """
-    Run site-level technical checks without crawling.
-    Instant results — no crawl needed.
+    Instant technical SEO health check — no crawl needed, results in seconds.
 
-    Checks:
-    - robots.txt (existence, disallow rules, sitemap declaration, crawl-delay)
-    - sitemap.xml (existence, URL count, index vs regular)
-    - HTTPS redirect (does http:// → https:// correctly?)
-    - www/non-www redirect (does the alternate host redirect to canonical?)
+    Checks robots.txt (rules, disallow, sitemap declaration, crawl-delay),
+    sitemap.xml (existence, URL count, sitemap index), HTTPS redirect
+    (http → https), and www/non-www canonicalisation.
+
+    USE THIS when asked:
+    - "check robots.txt", "is the sitemap set up", "quick site health"
+    - "does [site] redirect http to https", "www vs non-www check"
+    - Fast pre-audit sanity check before a full librecrawl_audit()
 
     Args:
         url: Site root URL (e.g. https://example.com)
@@ -1205,8 +1216,12 @@ def librecrawl_site_check(url: str) -> dict:
 @mcp.tool()
 def librecrawl_generate_report(crawl_id: int = None) -> dict:
     """
-    Generate a Markdown SEO report from a completed crawl.
-    Saves the report as a .md file and returns the path.
+    Generate a full Markdown SEO audit report from a completed crawl.
+    Runs 35+ checks (broken links, titles, metas, canonicals, images, orphan pages,
+    redirect chains, analytics coverage, etc.) and saves as a .md file.
+
+    USE THIS after librecrawl_start_crawl() finishes, or to re-generate a report
+    from any past crawl_id via librecrawl_list_crawls().
 
     Args:
         crawl_id: ID from librecrawl_start_crawl (optional — uses current crawl if omitted)
@@ -1250,25 +1265,28 @@ def librecrawl_generate_report(crawl_id: int = None) -> dict:
 
 
 @mcp.tool()
-def librecrawl_start_crawl(url: str, max_pages: int = 500) -> dict:
+def librecrawl_start_crawl(url: str, max_pages: int = 0) -> dict:
     """
-    Start a crawl manually. Returns crawl_id immediately — crawl runs async.
+    Start an async site crawl. Returns crawl_id immediately — does NOT wait for completion.
     Poll librecrawl_get_status() until done, then librecrawl_generate_report(crawl_id).
 
-    Use librecrawl_audit() instead for a one-call full audit.
+    Prefer librecrawl_audit() for a one-call full SEO audit with auto-report.
+    Use this tool when you need step-by-step control or want to crawl in the background.
 
     Args:
         url:       Full URL to crawl (e.g. https://example.com)
-        max_pages: Max pages (default 500)
+        max_pages: Max pages to crawl. 0 = unlimited (default). Set e.g. 500 to cap.
     """
-    call("POST", "/api/save_settings", json={
+    settings = {
         "enableJavaScript": False,
-        "maxUrls": max_pages,
         "maxDepth": 5,
         "crawlDelay": 0.5,
         "followRedirects": True,
         "crawlExternalLinks": False,
-    })
+    }
+    if max_pages > 0:
+        settings["maxUrls"] = max_pages
+    call("POST", "/api/save_settings", json=settings)
     result   = call("POST", "/api/start_crawl", json={"url": url})
     crawl_id = result.get("crawl_id")
     return {
@@ -1392,15 +1410,19 @@ def librecrawl_visualization_data() -> dict:
 @mcp.tool()
 def librecrawl_internal_links_analysis(crawl_id: int = None) -> dict:
     """
-    Deep internal linking analysis — reveals your site's internal authority distribution.
+    Deep internal linking analysis — maps internal authority distribution across the site.
 
     Answers:
     - Which pages get the most internal links? (= Google considers them most important)
+    - Which pages are orphans? (zero inbound internal links — invisible to Googlebot)
     - Which pages have zero outgoing internal links? (dead ends — no crawl flow out)
-    - Which pages link out to the most others? (potential crawl budget hubs)
-    - What are the top anchor text patterns across the site?
+    - Which pages are crawl budget hubs? (link out to the most others)
+    - What anchor text patterns dominate? (keyword signal analysis)
 
-    Use this after librecrawl_audit() to understand internal link equity.
+    USE THIS when asked:
+    - "internal linking audit", "orphan pages", "link equity distribution"
+    - "which pages need more internal links", "crawl budget analysis"
+    - "anchor text audit", "internal link map"
 
     Args:
         crawl_id: ID from librecrawl_start_crawl (optional — uses current crawl)
@@ -1579,8 +1601,13 @@ def _fetch_psi(url: str, strategy: str = "mobile") -> dict:
 @mcp.tool()
 def librecrawl_pagespeed(url: str, strategy: str = "mobile") -> dict:
     """
-    Core Web Vitals + Lighthouse scores via Google PageSpeed Insights.
-    Returns performance/SEO/accessibility scores, LCP/CLS/FCP/TBT, real-user CrUX data.
+    Core Web Vitals and Lighthouse scores via Google PageSpeed Insights API.
+    Returns LCP, CLS, FCP, TBT, INP, performance/SEO/accessibility scores,
+    and real-user CrUX field data where available.
+
+    USE THIS when asked:
+    - "Core Web Vitals", "page speed", "Lighthouse score", "CWV check"
+    - "how fast is [page]", "LCP / CLS issues", "performance audit"
 
     Args:
         url:      Full URL to test
@@ -1592,11 +1619,16 @@ def librecrawl_pagespeed(url: str, strategy: str = "mobile") -> dict:
 @mcp.tool()
 def librecrawl_pagespeed_audit(urls: list, strategy: str = "mobile") -> dict:
     """
-    Run PageSpeed Insights on multiple URLs — ranked worst to best.
-    Throttled to 1 req/sec (stays within free quota of 25k/day).
+    Batch Core Web Vitals audit — runs PageSpeed Insights on multiple pages,
+    ranked worst to best performance score. Identifies your slowest pages first.
+    Throttled to 1 req/sec to stay within the free 25k/day PSI quota.
+
+    USE THIS when asked:
+    - "check CWV across all pages", "which pages are slowest", "batch page speed audit"
+    - "performance audit for the whole site" (pass top URLs from librecrawl_audit export)
 
     Args:
-        urls:     List of URLs to test (recommend top 10–20 pages)
+        urls:     List of URLs to test (recommend top 10–25 pages)
         strategy: "mobile" (default) or "desktop"
     """
     if not PSI_API_KEY:
@@ -1715,10 +1747,15 @@ RICH_RESULTS_MAP = {
 def librecrawl_schema_check(url: str) -> dict:
     """
     Extract and classify all Schema.org / JSON-LD structured data from a page.
-    No API key required — parses the live page directly on the server.
+    No API key required — fetches and parses the live page directly.
 
-    Returns schema types found, which Google rich results they unlock, and
-    what high-value schema types are missing.
+    Returns schema types found, which Google rich results they unlock
+    (FAQ accordion, star ratings, breadcrumbs, product snippets, etc.),
+    and which high-value schema types are missing.
+
+    USE THIS when asked:
+    - "does [page] have schema markup", "check structured data", "JSON-LD audit"
+    - "what rich results is this page eligible for", "add FAQ schema"
 
     Args:
         url: Full URL to check
@@ -1741,8 +1778,13 @@ def librecrawl_schema_check(url: str) -> dict:
 @mcp.tool()
 def librecrawl_schema_audit(urls: list) -> dict:
     """
-    Check Schema.org structured data across multiple URLs.
-    No API key required.
+    Schema.org / structured data coverage audit across multiple pages.
+    No API key required. Identifies pages with no schema, shows schema type
+    breakdown across the site, and flags missing rich result opportunities.
+
+    USE THIS when asked:
+    - "schema coverage across the site", "which pages have structured data"
+    - "structured data audit", "rich results audit"
 
     Args:
         urls: List of URLs to check (pass top pages from a crawl export)
