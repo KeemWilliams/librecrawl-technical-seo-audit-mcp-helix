@@ -294,20 +294,24 @@ case "$CLIENT_CHOICE" in
   2)
     _write_mcp_config "$CLAUDE_CODE_CONFIG" "librecrawl" "$MCP_HTTP_JSON"
     log "Claude Code configured"
+    echo -e "  ${YELLOW}→ Start a new Claude Code session to activate (or run: claude mcp list).${NC}"
     ;;
   3)
     _write_mcp_config "$CLAUDE_DESKTOP_CONFIG" "librecrawl" "$MCP_HTTP_JSON"
     _write_mcp_config "$CLAUDE_CODE_CONFIG"    "librecrawl" "$MCP_HTTP_JSON"
     log "Claude Desktop + Code configured"
     echo -e "  ${YELLOW}→ Restart Claude Desktop to activate.${NC}"
+    echo -e "  ${YELLOW}→ Start a new Claude Code session to activate (or run: claude mcp list).${NC}"
     ;;
   4)
     _write_mcp_config "$CURSOR_CONFIG" "librecrawl" "$MCP_STDIO_JSON"
     log "Cursor configured (stdio mode)"
+    echo -e "  ${YELLOW}→ Restart Cursor to activate.${NC}"
     ;;
   5)
     _write_mcp_config "$WINDSURF_CONFIG" "librecrawl" "$MCP_STDIO_JSON"
     log "Windsurf configured (stdio mode)"
+    echo -e "  ${YELLOW}→ Restart Windsurf to activate.${NC}"
     ;;
   6)
     echo "  Skipped — manual config shown at the end."
