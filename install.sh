@@ -266,12 +266,13 @@ echo -e "${YELLOW}[2/3] Auto-add LibreCrawl MCP to your AI client?${NC}"
 echo -e "  1) Claude Desktop  (GUI app — ~/Library/Application Support/Claude/...)"
 echo -e "  2) Claude Code     (CLI — ~/.claude/settings.json)"
 echo -e "  3) Both Claude Desktop + Code"
-echo -e "  4) Cursor          (~/.cursor/mcp.json — uses stdio mode)"
-echo -e "  5) Skip — I'll add it manually"
-read -rp "  Choice [1-5, default 3]: " CLIENT_CHOICE </dev/tty || CLIENT_CHOICE="3"
+echo -e "  4) Cursor          (~/.cursor/mcp.json — stdio mode)"
+echo -e "  5) Windsurf        (~/.codeium/windsurf/mcp_config.json — stdio mode)"
+echo -e "  6) Skip — I'll add it manually"
+read -rp "  Choice [1-6, default 3]: " CLIENT_CHOICE </dev/tty || CLIENT_CHOICE="3"
 CLIENT_CHOICE="${CLIENT_CHOICE:-3}"
 
-# JSON entries for HTTP mode (Claude) and stdio mode (Cursor/Codex)
+# JSON entries for HTTP mode (Claude) and stdio mode (Cursor/Windsurf)
 MCP_HTTP_JSON="{\"type\":\"http\",\"url\":\"http://127.0.0.1:${MCP_PORT}/mcp\"}"
 MCP_STDIO_JSON="{\"command\":\"python3\",\"args\":[\"${MCP_DIR}/server.py\"],\"env\":{\"MCP_TRANSPORT\":\"stdio\",\"LIBRECRAWL_PORT\":\"${LIBRECRAWL_PORT}\",\"PAGESPEED_API_KEY\":\"${PAGESPEED_API_KEY:-}\"}}"
 
@@ -282,6 +283,7 @@ else
 fi
 CLAUDE_CODE_CONFIG="$HOME/.claude/settings.json"
 CURSOR_CONFIG="$HOME/.cursor/mcp.json"
+WINDSURF_CONFIG="$HOME/.codeium/windsurf/mcp_config.json"
 
 case "$CLIENT_CHOICE" in
   1)
@@ -304,7 +306,11 @@ case "$CLIENT_CHOICE" in
     log "Cursor configured (stdio mode)"
     ;;
   5)
-    echo "  Skipped — manual config shown below."
+    _write_mcp_config "$WINDSURF_CONFIG" "librecrawl" "$MCP_STDIO_JSON"
+    log "Windsurf configured (stdio mode)"
+    ;;
+  6)
+    echo "  Skipped — manual config shown at the end."
     ;;
 esac
 
@@ -326,24 +332,62 @@ case "$GSC_CHOICE" in
         curl -LsSf https://astral.sh/uv/install.sh | sh 2>/dev/null
         export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
       fi
-      GSC_SERVER_JSON="{\"command\":\"uvx\",\"args\":[\"mcp-search-console\"]}"
+      GSC_CMD="uvx"
+      GSC_ARGS='["mcp-search-console"]'
       log "GSC MCP will use uvx"
     else
       "${MCP_DIR}/venv/bin/pip" install --quiet mcp-search-console
-      GSC_SERVER_JSON="{\"command\":\"${MCP_DIR}/venv/bin/python3\",\"args\":[\"-m\",\"mcp_search_console\"]}"
+      GSC_CMD="${MCP_DIR}/venv/bin/python3"
+      GSC_ARGS='["-m","mcp_search_console"]'
       log "GSC MCP installed via pip"
     fi
-    # Add GSC to whichever Claude config was chosen
+
+    # ── Google credentials setup ──────────────────────────────────────────────
+    echo ""
+    echo -e "${BOLD}  GSC credentials setup${NC}"
+    echo -e "  The GSC MCP needs a Google OAuth credentials file. 3 steps:"
+    echo ""
+    echo -e "  ${BOLD}Step 1${NC} — Create a Google Cloud project (skip if you have one):"
+    echo -e "  → https://console.cloud.google.com/projectcreate"
+    echo ""
+    echo -e "  ${BOLD}Step 2${NC} — Enable the Search Console API:"
+    echo -e "  → https://console.cloud.google.com/apis/library/searchconsole.googleapis.com"
+    echo -e "     Click Enable."
+    echo ""
+    echo -e "  ${BOLD}Step 3${NC} — Create OAuth credentials:"
+    echo -e "  → https://console.cloud.google.com/apis/credentials"
+    echo -e "     Create Credentials → OAuth client ID → Desktop app"
+    echo -e "     Download the JSON file → save it somewhere (e.g. ~/.gsc-credentials.json)"
+    echo ""
+    echo -e "  ${YELLOW}Enter the full path to your credentials.json now, or press Enter to skip${NC}"
+    echo -e "  (You can add it later by editing your MCP config's GOOGLE_CREDENTIALS_FILE env)"
+    read -rp "  Path: " GSC_CREDS_PATH </dev/tty || GSC_CREDS_PATH=""
+
+    # Build GSC server JSON — include credentials path if provided
+    if [[ -n "${GSC_CREDS_PATH}" && -f "${GSC_CREDS_PATH}" ]]; then
+      GSC_SERVER_JSON="{\"command\":\"${GSC_CMD}\",\"args\":${GSC_ARGS},\"env\":{\"GOOGLE_CREDENTIALS_FILE\":\"${GSC_CREDS_PATH}\"}}"
+      log "GSC MCP configured with credentials: ${GSC_CREDS_PATH}"
+    elif [[ -n "${GSC_CREDS_PATH}" ]]; then
+      warn "File not found at '${GSC_CREDS_PATH}' — adding config without path. Edit it later."
+      GSC_SERVER_JSON="{\"command\":\"${GSC_CMD}\",\"args\":${GSC_ARGS},\"env\":{\"GOOGLE_CREDENTIALS_FILE\":\"${GSC_CREDS_PATH}\"}}"
+    else
+      GSC_SERVER_JSON="{\"command\":\"${GSC_CMD}\",\"args\":${GSC_ARGS}}"
+      warn "No credentials path entered. GSC MCP installed but won't connect until you add GOOGLE_CREDENTIALS_FILE."
+    fi
+
+    # Write GSC to whichever client config was chosen
     case "$CLIENT_CHOICE" in
       1) _write_mcp_config "$CLAUDE_DESKTOP_CONFIG" "gsc" "$GSC_SERVER_JSON" ;;
       2) _write_mcp_config "$CLAUDE_CODE_CONFIG"    "gsc" "$GSC_SERVER_JSON" ;;
       3) _write_mcp_config "$CLAUDE_DESKTOP_CONFIG" "gsc" "$GSC_SERVER_JSON"
          _write_mcp_config "$CLAUDE_CODE_CONFIG"    "gsc" "$GSC_SERVER_JSON" ;;
+      4) _write_mcp_config "$CURSOR_CONFIG"         "gsc" "$GSC_SERVER_JSON" ;;
+      5) _write_mcp_config "$WINDSURF_CONFIG"       "gsc" "$GSC_SERVER_JSON" ;;
     esac
     echo ""
-    echo -e "  ${YELLOW}GSC auth note:${NC} First time your AI agent requests GSC data, it opens"
-    echo -e "  a browser for Google OAuth. You'll need a Google credentials JSON file."
-    echo -e "  Full guide: github.com/AminForou/mcp-gsc"
+    echo -e "  ${YELLOW}First use:${NC} Your AI agent will open a browser for Google OAuth."
+    echo -e "  Select the Google account that has access to your Search Console properties."
+    echo -e "  Token is cached after that — no re-auth needed."
     ;;
   3)
     echo "  Skipped."
@@ -367,6 +411,23 @@ pm2 start "${MCP_DIR}/server.py" \
 pm2 save
 log "PM2 process registered and saved (survives reboots)"
 
+# ── Health check ──────────────────────────────────────────────────────────────
+info "Verifying MCP server is responding..."
+MCP_OK=false
+for i in $(seq 1 6); do
+  sleep 3
+  if curl -sf "http://127.0.0.1:${MCP_PORT}/mcp" -o /dev/null 2>/dev/null; then
+    MCP_OK=true
+    break
+  fi
+done
+if $MCP_OK; then
+  log "MCP server is live at http://127.0.0.1:${MCP_PORT}/mcp"
+else
+  warn "MCP server did not respond yet — it may still be starting."
+  warn "Check with: pm2 logs ${PM2_NAME}"
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 hr
 echo ""
@@ -377,7 +438,7 @@ echo -e "  MCP endpoint  : http://127.0.0.1:${MCP_PORT}/mcp"
 echo ""
 
 # Show manual config only if user skipped auto-config
-if [[ "${CLIENT_CHOICE}" == "5" ]]; then
+if [[ "${CLIENT_CHOICE}" == "6" ]]; then
   echo -e "${BOLD}  Manual MCP config (claude_desktop_config.json, ~/.claude/settings.json, or your client's equivalent):${NC}"
   cat << MANUALJSON
   {
