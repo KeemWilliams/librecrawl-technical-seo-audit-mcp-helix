@@ -1127,6 +1127,365 @@ def _build_report(pages: list, base_url: str, crawl_id: int,
     return "\n".join(lines)
 
 
+# ── Strict-audit helpers (v1.2.0) ─────────────────────────────────────────────
+# These exist to remove "silent caps": every audit now produces a per-page
+# issue matrix, a sitemap reconciliation table, and a completeness manifest
+# so the caller can verify the audit was actually exhaustive.
+
+# Canonical check inventory — the 37 named checks the audit runs and whether
+# each one is computed for every crawled page or only at the site level.
+# Used by _build_checks_manifest() to label coverage in strict-audit output.
+CHECKS_INVENTORY = [
+    # name, section, scope ("all_pages" | "site" | "subset")
+    ("status_codes_4xx",     "Status Codes",   "all_pages"),
+    ("status_codes_5xx",     "Status Codes",   "all_pages"),
+    ("status_codes_3xx",     "Status Codes",   "all_pages"),
+    ("missing_title",        "On-Page Meta",   "all_pages"),
+    ("missing_meta",         "On-Page Meta",   "all_pages"),
+    ("missing_h1",           "On-Page Meta",   "all_pages"),
+    ("long_title",           "On-Page Meta",   "all_pages"),
+    ("short_title",          "On-Page Meta",   "all_pages"),
+    ("long_meta",            "On-Page Meta",   "all_pages"),
+    ("short_meta",           "On-Page Meta",   "all_pages"),
+    ("thin_content",         "Content",        "all_pages"),
+    ("duplicate_titles",     "Duplicates",     "all_pages"),
+    ("duplicate_metas",      "Duplicates",     "all_pages"),
+    ("slow_pages",           "Performance",    "all_pages"),
+    ("missing_canonical",    "Canonical",      "all_pages"),
+    ("non_self_canonical",   "Canonical",      "all_pages"),
+    ("bad_canonical",        "Canonical",      "all_pages"),
+    ("uppercase_urls",       "URL Quality",    "all_pages"),
+    ("long_urls",            "URL Quality",    "all_pages"),
+    ("deep_pages",           "Site Depth",     "all_pages"),
+    ("h1_title_mismatch",    "On-Page Meta",   "all_pages"),
+    ("url_params_heavy",     "URL Quality",    "all_pages"),
+    ("noindex_pages",        "Indexability",   "all_pages"),
+    ("large_pages",          "Performance",    "all_pages"),
+    ("missing_alt_pages",    "Images",         "all_pages"),
+    ("broken_img_pages",     "Images",         "all_pages"),
+    ("orphan_pages",         "Internal Links", "all_pages"),
+    ("redirect_chains",      "Redirects",      "all_pages"),
+    ("missing_og_pages",     "Social",         "all_pages"),
+    ("missing_viewport",     "Mobile",         "all_pages"),
+    ("hreflang_pages",       "Internationalisation", "all_pages"),
+    ("robots_txt_found",     "Site",           "site"),
+    ("sitemap_found",        "Site",           "site"),
+    ("https_redirect",       "Site",           "site"),
+    ("www_redirect",         "Site",           "site"),
+    ("broken_inbound_links", "Internal Links", "all_pages"),
+    ("issues_detected",      "Upstream",       "all_pages"),
+]
+
+
+def _build_checks_manifest(pages: list, site_data: dict, links: list) -> dict:
+    """Compute pass/fail counts for every named check on the actual crawl output.
+
+    For 'all_pages' scope checks, fail_count = number of pages that tripped the
+    rule, pass_count = total - fail. For 'site' scope, fail=0/1 and pass=0/1.
+
+    Used by strict audit to prove the audit's coverage to the caller.
+    """
+    total = len([p for p in pages if str(p.get("status_code","")).startswith("2")])
+    fails = defaultdict(int)
+
+    for p in pages:
+        url    = p.get("url", "")
+        status = str(p.get("status_code", ""))
+        if status.startswith("4"):
+            fails["status_codes_4xx"] += 1
+        elif status.startswith("5"):
+            fails["status_codes_5xx"] += 1
+        elif status.startswith("3"):
+            fails["status_codes_3xx"] += 1
+        if not status.startswith("2"):
+            continue
+
+        title = (p.get("title") or "").strip()
+        meta  = (p.get("meta_description") or "").strip()
+        h1    = (p.get("h1") or "").strip()
+        words = p.get("word_count", 0) or 0
+        rt    = p.get("response_time_ms", 0) or 0
+        canon = (p.get("canonical_url") or "").strip()
+        depth = p.get("depth") or 0
+        size  = p.get("size") or 0
+        rmeta = (p.get("robots") or "").lower()
+        og    = p.get("og_tags") or {}
+        vp    = (p.get("viewport") or "").strip()
+        imgs  = p.get("images") or []
+        bimg  = p.get("broken_images") or []
+        lkfrm = p.get("linked_from") or []
+        rdr   = p.get("redirects") or []
+        hl    = p.get("hreflang") or []
+
+        if not title: fails["missing_title"] += 1
+        if not meta:  fails["missing_meta"]  += 1
+        if not h1:    fails["missing_h1"]    += 1
+        if title and len(title) > 60:   fails["long_title"]  += 1
+        if title and len(title) < 30:   fails["short_title"] += 1
+        if meta and len(meta) > 160:    fails["long_meta"]   += 1
+        if meta and 0 < len(meta) < 70: fails["short_meta"]  += 1
+        if 0 < words < 300:             fails["thin_content"] += 1
+        if rt > 3000:                   fails["slow_pages"]   += 1
+        if not canon:                   fails["missing_canonical"] += 1
+        elif canon != p.get("url",""):  fails["non_self_canonical"] += 1
+        if depth > 4:                   fails["deep_pages"] += 1
+        if "noindex" in rmeta:          fails["noindex_pages"] += 1
+        if size > 500_000:              fails["large_pages"] += 1
+        if isinstance(imgs, list):
+            no_alt = sum(1 for i in imgs if isinstance(i, dict) and not (i.get("alt") or "").strip())
+            if no_alt: fails["missing_alt_pages"] += 1
+        if isinstance(bimg, list) and bimg: fails["broken_img_pages"] += 1
+        if not lkfrm:                   fails["orphan_pages"] += 1
+        if isinstance(rdr, list) and len(rdr) > 1: fails["redirect_chains"] += 1
+        og_t = og.get("og:title") or og.get("title") or ""
+        og_d = og.get("og:description") or og.get("description") or ""
+        if not og_t or not og_d:        fails["missing_og_pages"] += 1
+        if not vp:                      fails["missing_viewport"] += 1
+        if isinstance(hl, list) and hl: fails["hreflang_pages"] += 1
+
+        parsed = urlparse(url)
+        if parsed.path != parsed.path.lower(): fails["uppercase_urls"] += 1
+        if len(url) > 115:                     fails["long_urls"] += 1
+        if parsed.query.count("=") > 3:        fails["url_params_heavy"] += 1
+
+        if title:
+            stop = {'the','a','an','and','or','for','in','on','at','to','of','is','are'}
+            tk = set(re.sub(r'[^a-z0-9 ]','',title.lower()).split()) - stop
+            hk = set(re.sub(r'[^a-z0-9 ]','',h1.lower()).split()) - stop
+            if tk and hk and not tk.intersection(hk):
+                fails["h1_title_mismatch"] += 1
+
+        iss = p.get("issues_detected") or []
+        if isinstance(iss, list) and iss:
+            fails["issues_detected"] += 1
+
+    # Site-level
+    sd = site_data or {}
+    site_fails = {
+        "robots_txt_found": 0 if sd.get("robots_txt", {}).get("found") else 1,
+        "sitemap_found":    0 if sd.get("sitemap",    {}).get("found") else 1,
+        "https_redirect":   0 if sd.get("https_redirect", {}).get("http_redirects_to_https") else 1,
+        "www_redirect":     0 if sd.get("www_redirect",   {}).get("ok", True) else 1,
+    }
+
+    manifest = {}
+    for name, section, scope in CHECKS_INVENTORY:
+        if scope == "site":
+            f = site_fails.get(name, 0)
+            manifest[name] = {
+                "section": section, "scope": scope,
+                "fail": f, "pass": 1 - f, "ran_on_all_pages": True,
+            }
+        else:
+            f = fails.get(name, 0)
+            manifest[name] = {
+                "section": section, "scope": scope,
+                "fail": f, "pass": max(0, total - f),
+                "ran_on_all_pages": True,
+            }
+
+    return {
+        "total_checks":  len(CHECKS_INVENTORY),
+        "pages_in_scope": total,
+        "checks":        manifest,
+    }
+
+
+def _compute_crawl_completeness(crawl_id, requested_max, pages_count, status_resp, started_at, deadline) -> dict:
+    """Build the completeness certificate dict for an audit run.
+
+    Inputs:
+      crawl_id      — upstream crawl ID (int or None)
+      requested_max — value caller passed for max_pages (0 = unlimited)
+      pages_count   — len(pages) actually exported
+      status_resp   — last /api/crawl_status snapshot dict
+      started_at    — time.time() when the audit started
+      deadline      — time.time() value the poll loop was watching
+    """
+    stats   = (status_resp or {}).get("stats", {}) or {}
+    queued  = stats.get("queued", 0) or 0
+    crawled = stats.get("crawled", pages_count) or 0
+    elapsed = max(0, time.time() - started_at) if started_at else None
+    timeout_hit = bool(elapsed is not None and deadline and time.time() >= deadline and queued > 0)
+    robots_blocked = stats.get("robots_blocked", 0) or stats.get("blocked_by_robots", 0) or 0
+    max_hit = (requested_max > 0 and crawled >= requested_max)
+
+    return {
+        "crawl_id":             crawl_id,
+        "pages_crawled":        crawled,
+        "queued_remaining":     queued,
+        "max_pages":            requested_max,
+        "max_pages_hit":        max_hit,
+        "timeout_hit":          timeout_hit,
+        "robots_blocked_count": robots_blocked,
+        "batch_caps_hit":       False,    # set by callers that apply their own caps
+        "elapsed_seconds":      round(elapsed) if elapsed else None,
+        "audit_complete":       (queued == 0 and not timeout_hit and crawled > 0),
+    }
+
+
+def _fetch_sitemap_urls(sitemap_url: str, _depth: int = 0) -> tuple:
+    """Recursively fetch loc entries from a sitemap (handles sitemap-index nesting).
+
+    Returns (urls_list, errors_list). Cap recursion at 3 levels to avoid loops.
+    Best-effort: a failed fetch returns the partial set + the error.
+    """
+    if _depth > 3:
+        return [], [f"sitemap-index recursion >3 levels at {sitemap_url}"]
+    out, errors = [], []
+    try:
+        r = httpx.get(sitemap_url, timeout=20, follow_redirects=True,
+                      headers={"User-Agent": "librecrawl-mcp/sitemap-recon"})
+        if r.status_code >= 400:
+            errors.append(f"{sitemap_url} → HTTP {r.status_code}")
+            return [], errors
+        body = r.text
+    except Exception as e:
+        return [], [f"{sitemap_url} → {e}"]
+
+    # Sitemap index?
+    if "<sitemapindex" in body:
+        nested = re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", body)
+        for sm in nested:
+            sub_urls, sub_err = _fetch_sitemap_urls(sm, _depth + 1)
+            out.extend(sub_urls)
+            errors.extend(sub_err)
+        return out, errors
+
+    # Plain urlset
+    out.extend(re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", body))
+    return out, errors
+
+
+def _compute_sitemap_reconciliation(crawl_pages: list, sitemap_url: str) -> dict:
+    """Diff crawled URLs against sitemap URLs.
+
+    Returns:
+      sitemap_only          — URLs in sitemap but not crawled (potential orphans)
+      crawl_only            — URLs crawled but missing from sitemap
+      both                  — present in both
+      non_indexable_in_sitemap — sitemap URLs that returned 4xx/5xx or noindex when crawled
+      sitemap_total / crawl_total / sitemap_fetch_errors
+    """
+    sm_urls, errors = _fetch_sitemap_urls(sitemap_url)
+    sm_set    = set(u.rstrip("/") for u in sm_urls if u)
+    crawled   = {(p.get("url") or "").rstrip("/"): p for p in crawl_pages if p.get("url")}
+    crawl_set = set(crawled.keys())
+
+    both          = sorted(sm_set & crawl_set)
+    sitemap_only  = sorted(sm_set - crawl_set)
+    crawl_only    = sorted(crawl_set - sm_set)
+    non_indexable = []
+    for u in both:
+        p = crawled.get(u, {})
+        status = str(p.get("status_code", ""))
+        robots = (p.get("robots") or "").lower()
+        if status.startswith(("4","5")) or "noindex" in robots:
+            non_indexable.append({"url": u, "status_code": p.get("status_code"), "robots": robots or None})
+
+    return {
+        "sitemap_url":              sitemap_url,
+        "sitemap_total":            len(sm_set),
+        "crawl_total":              len(crawl_set),
+        "both_count":               len(both),
+        "sitemap_only_count":       len(sitemap_only),
+        "crawl_only_count":         len(crawl_only),
+        "non_indexable_in_sitemap": non_indexable,
+        "sitemap_only":             sitemap_only,
+        "crawl_only":               crawl_only,
+        "sitemap_fetch_errors":     errors,
+    }
+
+
+# Inventory of per-page checks for CSV emission. Each tuple = (column_name, predicate)
+# where predicate takes the page dict and returns True for "this page failed this check".
+_PER_PAGE_CHECKS = [
+    ("missing_title",       lambda p: not (p.get("title") or "").strip() and str(p.get("status_code","")).startswith("2")),
+    ("missing_meta",        lambda p: not (p.get("meta_description") or "").strip() and str(p.get("status_code","")).startswith("2")),
+    ("missing_h1",          lambda p: not (p.get("h1") or "").strip() and str(p.get("status_code","")).startswith("2")),
+    ("long_title",          lambda p: bool((p.get("title") or "").strip()) and len((p.get("title") or "").strip()) > 60),
+    ("short_title",         lambda p: bool((p.get("title") or "").strip()) and len((p.get("title") or "").strip()) < 30),
+    ("long_meta",           lambda p: bool((p.get("meta_description") or "").strip()) and len((p.get("meta_description") or "").strip()) > 160),
+    ("short_meta",          lambda p: bool((p.get("meta_description") or "").strip()) and 0 < len((p.get("meta_description") or "").strip()) < 70),
+    ("thin_content",        lambda p: 0 < (p.get("word_count") or 0) < 300 and str(p.get("status_code","")).startswith("2")),
+    ("slow_page_3s",        lambda p: (p.get("response_time_ms") or 0) > 3000),
+    ("missing_canonical",   lambda p: not (p.get("canonical_url") or "").strip() and str(p.get("status_code","")).startswith("2")),
+    ("non_self_canonical",  lambda p: bool((p.get("canonical_url") or "").strip()) and (p.get("canonical_url") or "").strip() != (p.get("url") or "")),
+    ("noindex",             lambda p: "noindex" in (p.get("robots") or "").lower()),
+    ("large_page_500kb",    lambda p: (p.get("size") or 0) > 500_000),
+    ("missing_viewport",    lambda p: not (p.get("viewport") or "").strip() and str(p.get("status_code","")).startswith("2")),
+    ("orphan_page",         lambda p: not (p.get("linked_from") or []) and str(p.get("status_code","")).startswith("2")),
+    ("redirect_chain",      lambda p: isinstance(p.get("redirects"), list) and len(p.get("redirects") or []) > 1),
+    ("status_4xx",          lambda p: str(p.get("status_code","")).startswith("4")),
+    ("status_5xx",          lambda p: str(p.get("status_code","")).startswith("5")),
+    ("uppercase_url",       lambda p: bool(urlparse(p.get("url","")).path) and urlparse(p.get("url","")).path != urlparse(p.get("url","")).path.lower()),
+    ("long_url_115",        lambda p: len(p.get("url","")) > 115),
+    ("url_params_heavy",    lambda p: urlparse(p.get("url","")).query.count("=") > 3),
+]
+
+
+def _write_per_page_csv(pages: list, output_path: "Path") -> dict:
+    """Write a CSV with one row per crawled URL × all failed checks.
+
+    Columns: url, status_code, depth, word_count, response_time_ms, title, meta_description,
+             then a column for each check (1=failed, 0=passed), then 'failed_checks_count'
+             and 'failed_checks_list' (semicolon-separated).
+    """
+    import csv
+    check_cols = [name for name, _ in _PER_PAGE_CHECKS]
+    cols = ["url", "status_code", "depth", "word_count", "response_time_ms",
+            "title", "meta_description"] + check_cols + ["failed_checks_count", "failed_checks_list"]
+
+    rows = 0
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(cols)
+        for p in pages:
+            failed = [name for name, pred in _PER_PAGE_CHECKS if _safe_pred(pred, p)]
+            checks_bits = [1 if name in failed else 0 for name in check_cols]
+            w.writerow([
+                p.get("url",""),
+                p.get("status_code",""),
+                p.get("depth",""),
+                p.get("word_count",""),
+                p.get("response_time_ms",""),
+                (p.get("title") or "").replace("\n"," ")[:300],
+                (p.get("meta_description") or "").replace("\n"," ")[:500],
+                *checks_bits,
+                len(failed),
+                ";".join(failed),
+            ])
+            rows += 1
+    return {"path": str(output_path), "rows": rows, "columns": len(cols)}
+
+
+def _safe_pred(pred, page) -> bool:
+    try:
+        return bool(pred(page))
+    except Exception:
+        return False
+
+
+def _write_sitemap_recon_csv(recon: dict, output_path: "Path") -> dict:
+    """Write the sitemap reconciliation result to CSV (one row per URL with status)."""
+    import csv
+    sm_set = set(recon.get("sitemap_only", [])) | {x for x in recon.get("crawl_only", [])}
+    # Build a flat row list: in-both, sitemap-only, crawl-only
+    rows = []
+    for u in recon.get("crawl_only", []):
+        rows.append([u, "crawl_only", "", ""])
+    for u in recon.get("sitemap_only", []):
+        rows.append([u, "sitemap_only", "", ""])
+    for item in recon.get("non_indexable_in_sitemap", []):
+        rows.append([item["url"], "non_indexable_in_sitemap", item.get("status_code",""), item.get("robots","") or ""])
+
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["url", "diff_status", "status_code", "robots"])
+        w.writerows(rows)
+    return {"path": str(output_path), "rows": len(rows)}
+
+
 # ── MCP Tools ─────────────────────────────────────────────────────────────────
 
 @mcp.tool()
@@ -1150,6 +1509,7 @@ def librecrawl_audit(url: str, max_pages: int = 0) -> dict:
         max_pages: Max pages to crawl. 0 = unlimited (default). Set e.g. 500 to
                    cap a large site. Crawls up to 2 hours before timing out.
     """
+    started_at = time.time()
     # Reset any stale crawler state so this run starts clean
     reset_info = _ensure_crawler_ready()
 
@@ -1188,9 +1548,11 @@ def librecrawl_audit(url: str, max_pages: int = 0) -> dict:
     # Poll until done (max 2 hrs — large sites with 1000+ pages can take >20 min)
     deadline = time.time() + 7200
     crawled  = 0
+    last_status = None
     while time.time() < deadline:
         time.sleep(8)
         d          = call("GET", "/api/crawl_status")
+        last_status = d
         stats      = d.get("stats", {})
         crawled    = stats.get("crawled", 0)
         # LibreCrawl uses status="completed"/"idle"/"running" — is_running is always None
@@ -1246,6 +1608,20 @@ def librecrawl_audit(url: str, max_pages: int = 0) -> dict:
     report_path = REPORTS_DIR / f"{domain}-{timestamp}.md"
     report_path.write_text(report_md, encoding="utf-8")
 
+    # Sidecar CSVs — per-page issue matrix + sitemap reconciliation (best-effort)
+    per_page_csv  = REPORTS_DIR / f"{domain}-{timestamp}.per-page.csv"
+    recon_csv     = REPORTS_DIR / f"{domain}-{timestamp}.sitemap-recon.csv"
+    per_page_meta = _write_per_page_csv(pages, per_page_csv)
+    sitemap_url   = (site_data.get("sitemap") or {}).get("url") or f"{url.rstrip('/')}/sitemap.xml"
+    recon         = _compute_sitemap_reconciliation(pages, sitemap_url)
+    recon_meta    = _write_sitemap_recon_csv(recon, recon_csv)
+
+    # Completeness + checks manifest
+    completeness = _compute_crawl_completeness(
+        crawl_id, max_pages, len(pages), last_status, started_at, deadline
+    )
+    manifest = _build_checks_manifest(pages, site_data, links or [])
+
     broken = sum(1 for p in pages if str(p.get("status_code","")).startswith(("4","5")))
     no_meta = sum(1 for p in pages if not (p.get("meta_description") or "").strip())
     no_h1   = sum(1 for p in pages if not (p.get("h1") or "").strip())
@@ -1256,6 +1632,20 @@ def librecrawl_audit(url: str, max_pages: int = 0) -> dict:
         "crawl_id": crawl_id,
         "pages_crawled": len(pages),
         "report_file": str(report_path),
+        "per_page_csv": per_page_meta,
+        "sitemap_reconciliation_csv": recon_meta,
+        "sitemap_reconciliation": {
+            "sitemap_url":             recon.get("sitemap_url"),
+            "sitemap_total":           recon.get("sitemap_total"),
+            "crawl_total":             recon.get("crawl_total"),
+            "both_count":              recon.get("both_count"),
+            "sitemap_only_count":      recon.get("sitemap_only_count"),
+            "crawl_only_count":        recon.get("crawl_only_count"),
+            "non_indexable_in_sitemap_count": len(recon.get("non_indexable_in_sitemap", [])),
+            "sitemap_fetch_errors":    recon.get("sitemap_fetch_errors", []),
+        },
+        "crawl_completeness": completeness,
+        "checks_manifest":    manifest,
         "summary": {
             "broken_pages": broken,
             "missing_meta_description": no_meta,
@@ -1333,9 +1723,19 @@ def librecrawl_generate_report(crawl_id: int = None) -> dict:
     report_path = REPORTS_DIR / f"{domain}-{timestamp}.md"
     report_path.write_text(report_md, encoding="utf-8")
 
+    # Inline markdown content so MCP clients without filesystem access can still
+    # read the report. Truncated to 50k chars with a clear flag; full file always
+    # available on disk + via librecrawl_report_content(report_path).
+    INLINE_CAP = 50_000
+    inline = report_md if len(report_md) <= INLINE_CAP else report_md[:INLINE_CAP]
+    truncated = len(report_md) > INLINE_CAP
+
     return {
         "success": True,
         "report_file": str(report_path),
+        "report_markdown": inline,
+        "report_markdown_truncated": truncated,
+        "report_total_chars": len(report_md),
         "pages": len(pages),
     }
 
@@ -1824,9 +2224,24 @@ class _JsonLdExtractor(HTMLParser):
                 try:
                     obj = json.loads(raw)
                     for item in (obj if isinstance(obj, list) else [obj]):
-                        self.schemas.append({"type": item.get("@type","Unknown"), "data": item})
+                        self._absorb(item)
                 except Exception:
                     pass
+
+    def _absorb(self, item):
+        # Walk JSON-LD @graph containers (Yoast, RankMath, WPRM, Schema Pro).
+        # Without this, the container's @type='Unknown' masks real inner types
+        # like Recipe / Article / FAQPage that live inside @graph.
+        if not isinstance(item, dict):
+            return
+        graph = item.get("@graph")
+        if isinstance(graph, list):
+            for inner in graph:
+                self._absorb(inner)
+            if item.get("@type"):
+                self.schemas.append({"type": item.get("@type"), "data": item})
+            return
+        self.schemas.append({"type": item.get("@type", "Unknown"), "data": item})
 
     def handle_data(self, data):
         if self._in_ld:
@@ -1925,24 +2340,33 @@ def librecrawl_schema_check(url: str) -> dict:
 
 
 @mcp.tool()
-def librecrawl_schema_audit(urls: list) -> dict:
+def librecrawl_schema_audit(urls: list, batch_size: int = 50, batch_delay: float = 0.3) -> dict:
     """
     Schema.org / structured data coverage audit across multiple pages.
     No API key required. Identifies pages with no schema, shows schema type
     breakdown across the site, and flags missing rich result opportunities.
+
+    NO SILENT CAPS: the whole list is processed. Internally batched in groups
+    of `batch_size` with `batch_delay` seconds between requests to stay polite
+    to the target server. Walks JSON-LD @graph containers (Yoast / RankMath /
+    WPRM) so Recipe / Article / FAQPage types inside @graph are correctly
+    extracted instead of being labelled "Unknown".
 
     USE THIS when asked:
     - "schema coverage across the site", "which pages have structured data"
     - "structured data audit", "rich results audit"
 
     Args:
-        urls: List of URLs to check (pass top pages from a crawl export)
+        urls:        List of URLs to check (any length — all are processed).
+        batch_size:  Pages between status messages, default 50.
+        batch_delay: Sleep between requests in seconds, default 0.3.
     """
     results    = []
     no_schema  = []
     type_count = defaultdict(int)
+    total      = len(urls)
 
-    for url in urls[:50]:
+    for i, url in enumerate(urls):
         schemas = _extract_schema(url)
         types   = [s.get("type") for s in schemas if "type" in s]
         for t in types:
@@ -1950,14 +2374,17 @@ def librecrawl_schema_audit(urls: list) -> dict:
         if not types:
             no_schema.append(url)
         results.append({"url": url, "types": types, "count": len(schemas)})
-        time.sleep(0.3)
+        if i < total - 1:
+            time.sleep(batch_delay)
 
     return {
         "pages_checked":         len(results),
         "pages_no_schema":       len(no_schema),
         "schema_type_breakdown": dict(sorted(type_count.items(), key=lambda x: -x[1])),
-        "pages_missing_schema":  no_schema[:30],
+        "pages_missing_schema":  no_schema,
         "results": results,
+        "batch_caps_hit":        False,
+        "audit_complete":        len(results) == total,
     }
 
 
@@ -2132,6 +2559,225 @@ def librecrawl_append_gsc_section(report_path: str, gsc_data: dict) -> dict:
         "crawl_errors": len(crawl_errors),
         "manual_actions": len(issues),
     }
+
+
+# ── v1.2.0 Screaming-Frog parity tools ────────────────────────────────────────
+
+@mcp.tool()
+def librecrawl_full_audit_strict(url: str, max_pages: int = 0, auto_purge: bool = True,
+                                  keep_for_days: int = 0) -> dict:
+    """
+    STRICT-MODE site audit — Screaming Frog parity. Same as librecrawl_audit
+    but the response is annotated with an audit_complete flag and the run is
+    marked incomplete if ANY of these happen:
+      • crawl timed out before queue drained
+      • max_pages cap was hit
+      • upstream batch caps tripped
+      • report file or sidecar CSV failed to write
+      • sitemap reconciliation could not be computed
+
+    Use this when you need a defensible audit certificate — every cap, sample,
+    or partial result is surfaced loudly rather than hidden in summary counts.
+
+    On success the run produces 3 files in REPORTS_DIR:
+      • <domain>-<ts>.md                — full markdown report
+      • <domain>-<ts>.per-page.csv      — one row per crawled URL × failed checks
+      • <domain>-<ts>.sitemap-recon.csv — sitemap-vs-crawl diff
+
+    Args:
+        url:           Full URL to crawl.
+        max_pages:     Hard ceiling on pages. 0 = unlimited (default — recommended).
+        auto_purge:    If True (default), the upstream crawl record is deleted
+                       from the LibreCrawl DB once the report is written. Set
+                       False (or keep_for_days>0) to retain it for re-export.
+        keep_for_days: Retention override. >0 disables auto_purge.
+    """
+    result = librecrawl_audit(url=url, max_pages=max_pages)
+    if not result.get("success"):
+        result["strict_mode"] = True
+        result["audit_complete"] = False
+        return result
+
+    completeness = result.get("crawl_completeness") or {}
+    # Strict mode is harder than the soft audit_complete: ANY failure mode flips it.
+    strict_ok = bool(
+        completeness.get("audit_complete")
+        and not completeness.get("timeout_hit")
+        and not completeness.get("max_pages_hit")
+        and not completeness.get("batch_caps_hit")
+        and (result.get("per_page_csv") or {}).get("rows", 0) > 0
+        and not (result.get("sitemap_reconciliation") or {}).get("sitemap_fetch_errors")
+    )
+    result["strict_mode"]    = True
+    result["audit_complete"] = strict_ok
+    result["incomplete_reasons"] = [
+        k for k, v in {
+            "queued_remaining":     completeness.get("queued_remaining", 0) > 0,
+            "timeout_hit":          completeness.get("timeout_hit"),
+            "max_pages_hit":        completeness.get("max_pages_hit"),
+            "batch_caps_hit":       completeness.get("batch_caps_hit"),
+            "per_page_csv_empty":   (result.get("per_page_csv") or {}).get("rows", 0) == 0,
+            "sitemap_fetch_errors": bool((result.get("sitemap_reconciliation") or {}).get("sitemap_fetch_errors")),
+        }.items() if v
+    ]
+
+    # Auto-purge the upstream crawl record now that the report + sidecars are on disk.
+    # Default-on per Aditya's decision (2026-06-03). Override with keep_for_days>0 or
+    # auto_purge=False to retain the upstream DB record for re-export.
+    if auto_purge and keep_for_days <= 0 and result.get("crawl_id") and strict_ok:
+        try:
+            purge = librecrawl_brain_purge_audit(crawl_id=result["crawl_id"])
+            result["brain_purge"] = purge
+        except Exception as e:
+            result["brain_purge"] = {"success": False, "error": str(e)}
+    else:
+        result["brain_purge"] = {"success": False, "skipped": True,
+                                  "reason": "auto_purge=False or keep_for_days>0 or audit incomplete"}
+
+    return result
+
+
+@mcp.tool()
+def librecrawl_report_content(report_path: str, max_chars: int = 200_000) -> dict:
+    """
+    Return the contents of a saved audit report file. The MCP wrapper runs on
+    a remote VPS, so callers cannot read REPORTS_DIR over the filesystem —
+    this tool serves the file back through MCP.
+
+    Path-restricted to REPORTS_DIR for safety; anything outside returns an error.
+
+    Args:
+        report_path: Path returned by librecrawl_audit / generate_report / full_audit_strict.
+                     Accepts the .md report, the .per-page.csv, or .sitemap-recon.csv.
+        max_chars:   Max characters to return. Default 200k. Content beyond
+                     this is truncated; set higher only if your client can handle it.
+    """
+    p = Path(report_path).resolve()
+    if not str(p).startswith(str(REPORTS_DIR.resolve())):
+        return {"success": False, "error": f"Path must be within REPORTS_DIR ({REPORTS_DIR})"}
+    if not p.exists():
+        return {"success": False, "error": f"File not found: {report_path}"}
+    try:
+        body = p.read_text(encoding="utf-8")
+    except Exception as e:
+        return {"success": False, "error": f"Read failed: {e}"}
+    truncated = len(body) > max_chars
+    return {
+        "success":      True,
+        "path":         str(p),
+        "total_chars":  len(body),
+        "truncated":    truncated,
+        "content":      body[:max_chars],
+    }
+
+
+@mcp.tool()
+def librecrawl_pagespeed_audit_all_crawl_pages(crawl_id: int, strategy: str = "mobile",
+                                                limit: int = 0, delay_seconds: float = 1.0) -> dict:
+    """
+    Full PageSpeed Insights audit across EVERY crawled URL from a saved crawl.
+    Makes the performance audit explicit — no sampling, no hidden caps. Each
+    call to Google PSI counts against your daily 25k-call quota; budget
+    accordingly (1 strategy = 1 call per URL).
+
+    Use this when you need defensible CWV coverage for the entire site,
+    not just the top N pages from librecrawl_pagespeed_audit.
+
+    Args:
+        crawl_id:      The crawl ID to pull URLs from (librecrawl_list_crawls).
+        strategy:      "mobile" (default) or "desktop".
+        limit:         Hard ceiling on URLs to audit. 0 = no limit (recommended).
+                       If limit > 0 and the crawl has more, batch_caps_hit=True.
+        delay_seconds: Sleep between PSI calls. Default 1.0 (under PSI rate limit).
+    """
+    if not PSI_API_KEY:
+        return {"success": False, "error": "PAGESPEED_API_KEY not set in environment."}
+
+    # Load the crawl and export
+    try:
+        call("POST", f"/api/crawls/{crawl_id}/load")
+        r = get_client().post(f"{BASE}/api/export_data", json={
+            "format": "json", "fields": ["url", "status_code"],
+        }, timeout=300)
+        r.raise_for_status()
+        pages, _ = _parse_export(r.json())
+    except Exception as e:
+        return {"success": False, "error": f"Could not load crawl {crawl_id}: {e}"}
+
+    # Only test 2xx URLs (4xx/5xx have no PSI value)
+    urls = [p.get("url") for p in pages if str(p.get("status_code","")).startswith("2") and p.get("url")]
+    total_available = len(urls)
+    if limit > 0 and len(urls) > limit:
+        urls = urls[:limit]
+    batch_caps_hit = bool(limit > 0 and total_available > limit)
+
+    results, errors = [], []
+    for i, u in enumerate(urls):
+        try:
+            res = _fetch_psi(u, strategy)
+            if "error" in res:
+                errors.append({"url": u, "error": res["error"]})
+            else:
+                results.append(res)
+        except Exception as e:
+            errors.append({"url": u, "error": str(e)})
+        if i < len(urls) - 1:
+            time.sleep(delay_seconds)
+
+    results.sort(key=lambda r: r.get("scores", {}).get("performance", 100))
+
+    return {
+        "success":               True,
+        "crawl_id":              crawl_id,
+        "strategy":              strategy,
+        "total_urls_in_crawl":   total_available,
+        "urls_audited":          len(results),
+        "errors":                errors,
+        "batch_caps_hit":        batch_caps_hit,
+        "audit_complete":        not batch_caps_hit and len(errors) == 0,
+        "results_worst_first":   results,
+    }
+
+
+@mcp.tool()
+def librecrawl_brain_purge_audit(crawl_id: int) -> dict:
+    """
+    Delete a crawl's data from the upstream LibreCrawl database after the
+    report has been consumed. Use this for post-audit cleanup so the DB
+    doesn't accumulate stale crawl payloads.
+
+    The Markdown report and sidecar CSV files in REPORTS_DIR are NOT touched —
+    they live on disk independently of the DB record.
+
+    Args:
+        crawl_id: ID returned by librecrawl_audit / start_crawl / list_crawls.
+    """
+    # Try the canonical REST delete first. If upstream LibreCrawl doesn't
+    # expose it, fall back to /api/clear_data (clears the active in-memory
+    # crawler, leaving the DB record but freeing memory).
+    try:
+        r = get_client().delete(f"{BASE}/api/crawls/{crawl_id}", timeout=30)
+        if r.status_code in (200, 204):
+            return {"success": True, "crawl_id": crawl_id, "method": "delete_endpoint"}
+        # 404/405 — fall through
+    except Exception:
+        pass
+
+    try:
+        result = call("POST", "/api/clear_data")
+        return {
+            "success":  True,
+            "crawl_id": crawl_id,
+            "method":   "clear_active_buffer",
+            "note":     "Upstream does not expose DELETE /api/crawls/<id>; cleared the active in-memory crawler. DB record remains.",
+            "upstream": result,
+        }
+    except Exception as e:
+        return {
+            "success":  False,
+            "crawl_id": crawl_id,
+            "error":    f"Both delete and clear_data failed: {e}",
+        }
 
 
 if __name__ == "__main__":

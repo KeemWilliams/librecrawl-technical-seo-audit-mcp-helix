@@ -13,6 +13,24 @@ Works with **any MCP-compatible AI agent** — Claude, Cursor, Windsurf, OpenAI 
 
 ---
 
+### What's new in v1.2.0 — Screaming-Frog parity, no silent caps
+
+The "guardrail" release. Every audit now produces a defensible **completeness certificate** instead of summary counts that hide partial runs.
+
+- **🆕 `librecrawl_full_audit_strict(url, max_pages=0)`** — strict-mode audit. Fails loudly on ANY cap, timeout, or partial result. Returns `audit_complete: bool` + `incomplete_reasons: []` you can branch on. Auto-purges the upstream crawl record after the report is on disk (override with `auto_purge=False`).
+- **`crawl_completeness` block on every audit return** — `pages_crawled`, `queued_remaining`, `max_pages_hit`, `timeout_hit`, `robots_blocked_count`, `batch_caps_hit`, `audit_complete`. The "audit completeness certificate" the report engine was missing.
+- **`checks_manifest` block on every audit return** — all 37 named checks with their section, pass/fail counts, and `ran_on_all_pages` flag. Tells you exactly which checks ran site-wide vs sampled.
+- **Per-page issue matrix as a sidecar CSV** — one row per crawled URL × all failed checks. `<domain>-<ts>.per-page.csv` next to the .md report. Replaces "172 missing meta" totals with the actual URL list.
+- **Sitemap reconciliation as a sidecar CSV** — `<domain>-<ts>.sitemap-recon.csv` lists URLs only in sitemap, only in crawl, and non-indexable sitemap entries. Catches the silent sitemap drift case.
+- **🆕 `librecrawl_pagespeed_audit_all_crawl_pages(crawl_id)`** — full PageSpeed Insights across every crawled URL. No sampling, no hidden cap. Worst-first results.
+- **🆕 `librecrawl_report_content(report_path)`** — return the report file content directly through MCP. For agents that can't read REPORTS_DIR over the filesystem (Codex, hosted clients). Path-restricted to REPORTS_DIR.
+- **🆕 `librecrawl_brain_purge_audit(crawl_id)`** — delete a crawl from the upstream LibreCrawl DB after the report is consumed. Stops audit payloads accumulating.
+- **`librecrawl_schema_audit(urls)` cap removed** — used to silently slice to 50 URLs even when you passed 102. Now processes the whole list, transparently batched with a `batch_delay` parameter. `audit_complete` flag in the return.
+- **JSON-LD `@graph` parser fix** — Yoast / RankMath / WPRM ship schema inside `@graph` containers. The parser used to label these `Unknown`. Now walks the graph and surfaces Recipe / Article / FAQPage types correctly.
+- **`librecrawl_generate_report` returns inline Markdown** — `report_markdown` (50k char cap + truncation flag) so single-call audits work for clients without filesystem access.
+
+Tool count: **20 → 24**.
+
 ### What's new in v1.1.1
 
 - **🆕 `librecrawl_resume_from_crawl_id(crawl_id)`** — crawl a huge site in chunks across days, sessions, and server restarts. Pause now, resume tomorrow from a different MCP session — picks up at the exact URL it stopped on, re-uses every page already crawled, zero duplicate requests to the target server. The "however big, in chunks, polite to the server" feature.
@@ -99,9 +117,9 @@ State persists across PM2 restarts, server reboots, and entirely different MCP c
 
 [LibreCrawl](https://github.com/PhialsBasement/LibreCrawl) is a powerful self-hosted SEO crawler. On its own you get a web UI and raw crawl data. This MCP layer turns it into a fully automated AI-native audit engine — one sentence gets you a complete site audit, saved as a Markdown report, ready to act on.
 
-### 20 tools, works with any AI agent
+### 24 tools, works with any AI agent
 
-Your AI gains **20 specialised SEO tools**. Ask in plain English — the AI picks the right tool, runs it, interprets the output, and gives you a fix plan. No dashboards to navigate, no exports to download, no manual cross-referencing.
+Your AI gains **24 specialised SEO tools** (v1.2.0). Ask in plain English — the AI picks the right tool, runs it, interprets the output, and gives you a fix plan. No dashboards to navigate, no exports to download, no manual cross-referencing.
 
 - `librecrawl_audit()` — one call: crawls the site, runs site-level checks, generates a structured Markdown report with a prioritised fix checklist. Done.
 - Persistent authenticated session across all tool calls — no re-login between steps

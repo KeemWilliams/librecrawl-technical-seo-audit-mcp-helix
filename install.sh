@@ -203,7 +203,7 @@ info "Step 4/5 — Installing LibreCrawl MCP server..."
 MCP_DIR="${INSTALL_DIR}/mcp-server"
 mkdir -p "${MCP_DIR}"
 
-# Download the full MCP server (20 tools) from the repo
+# Download the full MCP server (24 tools) from the repo
 info "Downloading MCP server (server.py)..."
 curl -fsSL "https://raw.githubusercontent.com/adityaarsharma/librecrawl-mcp/main/server.py" \
      -o "${MCP_DIR}/server.py" || err "Failed to download server.py from GitHub"
@@ -472,20 +472,23 @@ STUDIOJSON
   echo ""
 fi
 
-echo -e "  ${BOLD}20 tools available:${NC}"
+echo -e "  ${BOLD}24 tools available (v1.2.0):${NC}"
+echo -e "    Strict audits    : librecrawl_full_audit_strict (no silent caps),"
+echo -e "                       librecrawl_audit, librecrawl_site_check"
 echo -e "    Crawl lifecycle  : librecrawl_start_crawl, librecrawl_get_status,"
 echo -e "                       librecrawl_export_results, librecrawl_list_crawls,"
 echo -e "                       librecrawl_stop_crawl, librecrawl_pause_crawl,"
-echo -e "                       librecrawl_resume_crawl"
-echo -e "    Site analysis    : librecrawl_audit, librecrawl_site_check,"
-echo -e "                       librecrawl_internal_links_analysis,"
+echo -e "                       librecrawl_resume_crawl, librecrawl_resume_from_crawl_id,"
+echo -e "                       librecrawl_brain_purge_audit"
+echo -e "    Site analysis    : librecrawl_internal_links_analysis,"
 echo -e "                       librecrawl_filter_issues"
 echo -e "    Technical SEO    : librecrawl_pagespeed, librecrawl_pagespeed_audit,"
+echo -e "                       librecrawl_pagespeed_audit_all_crawl_pages,"
 echo -e "                       librecrawl_schema_check, librecrawl_schema_audit,"
 echo -e "                       librecrawl_get_settings"
 echo -e "    Reporting        : librecrawl_append_gsc_section,"
 echo -e "                       librecrawl_visualization_data,"
-echo -e "                       librecrawl_generate_report"
+echo -e "                       librecrawl_generate_report, librecrawl_report_content"
 echo ""
 echo -e "  ${BOLD}First audit:${NC} Ask your AI agent: \"Audit https://example.com\""
 echo -e "  ${BOLD}Test:${NC}"
