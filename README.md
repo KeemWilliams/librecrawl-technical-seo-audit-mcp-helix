@@ -395,14 +395,6 @@ Agent: → unzips, reads per-page.csv (filters status_4xx OR status_5xx)
 
 ---
 
-## ⭐ If this is useful, a star helps others find it
-
-[**⭐ Star librecrawl-mcp**](https://github.com/adityaarsharma/librecrawl-mcp/stargazers) — every star pushes the repo up GitHub's MCP-server discovery so more SEOs and devs find an open-source option.
-
-[![Star History Chart](https://api.star-history.com/svg?repos=adityaarsharma/librecrawl-mcp&type=Date)](https://star-history.com/#adityaarsharma/librecrawl-mcp&Date)
-
----
-
 <div align="center">
 
 ### Built by [Aditya Sharma](https://adityaarsharma.com) · MIT · No telemetry · No SaaS · No vendor lock-in
