@@ -4,10 +4,10 @@
 # Self-hosted SEO crawler — MCP server for any AI agent
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/adityaarsharma/librecrawl-mcp/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/adityaarsharma/librecrawl-technical-seo-audit-mcp/main/install.sh | bash
 #
 # Or with a custom install dir:
-#   INSTALL_DIR=/opt/librecrawl-mcp bash install.sh
+#   INSTALL_DIR=/opt/librecrawl-technical-seo-audit-mcp bash install.sh
 #
 # What this installs:
 #   1. LibreCrawl (Docker container) — SEO crawler on port 5080
@@ -21,8 +21,8 @@ set -euo pipefail
 # ── Config ───────────────────────────────────────────────────────────────────
 LIBRECRAWL_PORT="${LIBRECRAWL_PORT:-5080}"
 MCP_PORT="${MCP_PORT:-5081}"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/librecrawl-mcp}"
-PM2_NAME="librecrawl-mcp"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/librecrawl-technical-seo-audit-mcp}"
+PM2_NAME="librecrawl-technical-seo-audit-mcp"
 MCP_USERNAME="${MCP_USERNAME:-mcp-user}"
 
 # ── Colors ───────────────────────────────────────────────────────────────────
@@ -207,7 +207,7 @@ mkdir -p "${MCP_DIR}"
 # server.py is the FastMCP entrypoint; the others are imported by it.
 # Server-side instructions + ephemeral mode + 37 tools all need these files.
 info "Downloading MCP server modules from GitHub (10 files)..."
-BASE_URL="https://raw.githubusercontent.com/adityaarsharma/librecrawl-mcp/main"
+BASE_URL="https://raw.githubusercontent.com/adityaarsharma/librecrawl-technical-seo-audit-mcp/main"
 for f in server.py state.py libreclient.py runner.py external_links.py \
          content_audit.py extended_checks.py schema_validator.py \
          sitemap_fill.py pdf_report.py; do

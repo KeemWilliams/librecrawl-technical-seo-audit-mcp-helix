@@ -1,5 +1,5 @@
 """
-Extended SEO checks pack (librecrawl-mcp v1.5 + v2.0 easy half).
+Extended SEO checks pack (librecrawl-technical-seo-audit-mcp v1.5 + v2.0 easy half).
 
 Closes the gap between LibreCrawl's upstream checks and Screaming-Frog parity
 on the items that don't need a JS render. Each check writes findings to a
@@ -721,7 +721,7 @@ async def _fetch_for_checks(url: str, client: httpx.AsyncClient,
     try:
         r = await client.get(url, timeout=timeout_s, follow_redirects=True,
                               headers={
-                                  "User-Agent": "LibreCrawl-MCP/1.5 (Extended Checks; +https://github.com/adityaarsharma/librecrawl-mcp)",
+                                  "User-Agent": "LibreCrawl-MCP/1.5 (Extended Checks; +https://github.com/adityaarsharma/librecrawl-technical-seo-audit-mcp)",
                                   "Accept": "text/html,*/*;q=0.5",
                               })
         return url, r, None

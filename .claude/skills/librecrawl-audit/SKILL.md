@@ -1,6 +1,6 @@
 ---
 name: librecrawl-audit
-description: Run a full technical SEO audit on any website via the librecrawl-mcp MCP server. Use when the user asks for "audit X site", "SEO check", "broken link sweep", "Screaming Frog this site", "schema validation", "site health report", "core web vitals scan", "find missing meta / H1 / canonical", "sitemap audit", "external link check", or any phrase indicating they want a comprehensive technical SEO audit on a live URL. Returns a PDF + 7 sidecar CSVs as a zip. Server is ephemeral — once you download the zip, the audit is gone from the server.
+description: Run a full technical SEO audit on any website via the librecrawl-technical-seo-audit-mcp MCP server. Use when the user asks for "audit X site", "SEO check", "broken link sweep", "Screaming Frog this site", "schema validation", "site health report", "core web vitals scan", "find missing meta / H1 / canonical", "sitemap audit", "external link check", or any phrase indicating they want a comprehensive technical SEO audit on a live URL. Returns a PDF + 7 sidecar CSVs as a zip. Server is ephemeral — once you download the zip, the audit is gone from the server.
 ---
 
 # ⚠️ MANDATORY RULES — read first, no exceptions
@@ -43,7 +43,7 @@ That path is on the server. Useless to the user.
 
 # librecrawl-audit
 
-Drive the librecrawl-mcp MCP server to produce a complete technical SEO audit of any website. The MCP exposes 37 tools at `mcp__librecrawl-posi__*` (or whatever the local connector name is in the user's config).
+Drive the librecrawl-technical-seo-audit-mcp MCP server to produce a complete technical SEO audit of any website. The MCP exposes 37 tools at `mcp__librecrawl-posi__*` (or whatever the local connector name is in the user's config).
 
 ## When to use this skill
 
@@ -238,4 +238,4 @@ Quick map of all tools the librecrawl MCP exposes. Most flows use only the **hig
 
 ## Repo
 
-GitHub: https://github.com/adityaarsharma/librecrawl-mcp · MIT · By Aditya Sharma
+GitHub: https://github.com/adityaarsharma/librecrawl-technical-seo-audit-mcp · MIT · By Aditya Sharma

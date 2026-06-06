@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🕷️ librecrawl-mcp
+# 🕷️ librecrawl-technical-seo-audit-mcp
 
 ### **The AI-native technical SEO crawler.**
 
@@ -11,8 +11,8 @@ Built on the open-source [**LibreCrawl**](https://github.com/PhialsBasement/Libr
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-orange?style=for-the-badge&logo=anthropic)](https://modelcontextprotocol.io)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![Latest Release](https://img.shields.io/github/v/release/adityaarsharma/librecrawl-mcp?style=for-the-badge&color=brightgreen)](https://github.com/adityaarsharma/librecrawl-mcp/releases)
-[![GitHub stars](https://img.shields.io/github/stars/adityaarsharma/librecrawl-mcp?style=for-the-badge&color=yellow)](https://github.com/adityaarsharma/librecrawl-mcp/stargazers)
+[![Latest Release](https://img.shields.io/github/v/release/adityaarsharma/librecrawl-technical-seo-audit-mcp?style=for-the-badge&color=brightgreen)](https://github.com/adityaarsharma/librecrawl-technical-seo-audit-mcp/releases)
+[![GitHub stars](https://img.shields.io/github/stars/adityaarsharma/librecrawl-technical-seo-audit-mcp?style=for-the-badge&color=yellow)](https://github.com/adityaarsharma/librecrawl-technical-seo-audit-mcp/stargazers)
 [![Built on LibreCrawl](https://img.shields.io/badge/Built%20on-LibreCrawl-7C3AED?style=for-the-badge)](https://github.com/PhialsBasement/LibreCrawl)
 
 [![Works With](https://img.shields.io/badge/Claude%20Code-supported-D97757?style=flat-square)](https://docs.anthropic.com/claude-code)
@@ -30,7 +30,7 @@ Built on the open-source [**LibreCrawl**](https://github.com/PhialsBasement/Libr
 
 ## 🤔 Don't know what an MCP is? Read this 30-second explainer
 
-> **Model Context Protocol (MCP)** is the open standard that lets AI assistants like Claude, Cursor, or Codex call external tools. Think of it as "USB for AI assistants" — you plug a tool in, the AI can use it. librecrawl-mcp is one of those tools. Once installed, you just *ask* your AI assistant to audit a site, and it does. No GUI. No dashboard. No exports.
+> **Model Context Protocol (MCP)** is the open standard that lets AI assistants like Claude, Cursor, or Codex call external tools. Think of it as "USB for AI assistants" — you plug a tool in, the AI can use it. librecrawl-technical-seo-audit-mcp is one of those tools. Once installed, you just *ask* your AI assistant to audit a site, and it does. No GUI. No dashboard. No exports.
 
 **New to all this?**
 - Don't have Claude Code yet? → [Install Claude Code](https://docs.anthropic.com/claude-code) (free for individuals).
@@ -54,7 +54,7 @@ That's the product. **Your AI assistant runs a full technical SEO audit for you.
 
 ## 🔥 Why this exists
 
-There are great desktop SEO crawlers (you know the ones). There are great cloud SEO suites. **There was no AI-native crawler.** librecrawl-mcp fills that gap with five things no comparable open-source MCP server does:
+There are great desktop SEO crawlers (you know the ones). There are great cloud SEO suites. **There was no AI-native crawler.** librecrawl-technical-seo-audit-mcp fills that gap with five things no comparable open-source MCP server does:
 
 ### ⚡ It runs **inside your AI assistant**
 
@@ -62,11 +62,11 @@ There are great desktop SEO crawlers (you know the ones). There are great cloud 
 
 ### 🚀 Chunked-progressive crawler that **never times out**
 
-Most SEO MCP servers (SiteAudit MCP, AgentAEO, SE Ranking MCP) run synchronously and disconnect on sites over a few hundred pages. librecrawl-mcp runs the crawl in a **background worker thread**, persists progress to SQLite WAL, and returns a `session_id` in **under 2 seconds**. Your agent polls a tiny status tool until done. **10,000-page enterprise sites work the same as 50-page blogs.** Survives PM2 / MCP-client restarts mid-crawl.
+Most SEO MCP servers (SiteAudit MCP, AgentAEO, SE Ranking MCP) run synchronously and disconnect on sites over a few hundred pages. librecrawl-technical-seo-audit-mcp runs the crawl in a **background worker thread**, persists progress to SQLite WAL, and returns a `session_id` in **under 2 seconds**. Your agent polls a tiny status tool until done. **10,000-page enterprise sites work the same as 50-page blogs.** Survives PM2 / MCP-client restarts mid-crawl.
 
 ### 🛡️ Catches WAF challenges other crawlers **silently misreport**
 
-Cloudflare, Akamai, DataDome, Imperva, and PerimeterX challenge pages are served as `200 OK` but contain a JavaScript challenge instead of your content. Most crawlers report these as "page OK, all good". librecrawl-mcp fingerprints the challenge in the response body and flags `bot_block_challenge_detected`. **You see what's actually broken.**
+Cloudflare, Akamai, DataDome, Imperva, and PerimeterX challenge pages are served as `200 OK` but contain a JavaScript challenge instead of your content. Most crawlers report these as "page OK, all good". librecrawl-technical-seo-audit-mcp fingerprints the challenge in the response body and flags `bot_block_challenge_detected`. **You see what's actually broken.**
 
 ### 🤖 An **AIMD controller** tunes crawl delay live
 
@@ -85,7 +85,7 @@ WeasyPrint, A4, page numbers, footer on every page. Open in any PDF viewer. No S
 ## ⚡ Install in 60 seconds
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/adityaarsharma/librecrawl-mcp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/adityaarsharma/librecrawl-technical-seo-audit-mcp/main/install.sh | bash
 ```
 
 The installer asks 3 questions (target client, optional Google PageSpeed API key, optional GSC integration) and writes a ready-to-use MCP entry into your Claude / Cursor / Codex / Windsurf config. **Done.**
@@ -106,8 +106,8 @@ You don't need to be. If you can:
 <summary><strong>Manual install (Python 3.10+, Docker for LibreCrawl backend)</strong></summary>
 
 ```bash
-git clone https://github.com/adityaarsharma/librecrawl-mcp.git
-cd librecrawl-mcp
+git clone https://github.com/adityaarsharma/librecrawl-technical-seo-audit-mcp.git
+cd librecrawl-technical-seo-audit-mcp
 python3 -m venv venv && source venv/bin/activate
 pip install httpx mcp weasyprint markdown fpdf2
 # Start LibreCrawl backend on :5080 (see install.sh for Docker compose)
@@ -202,7 +202,7 @@ Article · Product · Recipe · FAQPage · BreadcrumbList · Event · JobPosting
 
 > This is a factual feature comparison. Prices were checked at publication and may have changed — see each vendor's site for current pricing. Brand names belong to their respective owners.
 
-| Capability | Desktop crawler (Screaming Frog SEO Spider™)<sup>1</sup> | Desktop+cloud crawler (Sitebulb™)<sup>2</sup> | Cloud site-audit (Ahrefs™)<sup>3</sup> | **librecrawl-mcp** |
+| Capability | Desktop crawler (Screaming Frog SEO Spider™)<sup>1</sup> | Desktop+cloud crawler (Sitebulb™)<sup>2</sup> | Cloud site-audit (Ahrefs™)<sup>3</sup> | **librecrawl-technical-seo-audit-mcp** |
 |---|:---:|:---:|:---:|:---:|
 | **Pricing model** | Free tier (500 URLs) · paid annual licence | Paid monthly subscription | Bundled with main subscription | **Free, MIT-licensed, self-hosted** |
 | **Page cap** | 500 free / unlimited paid | Unlimited | Tiered by subscription plan | **♾️ Unlimited** |
@@ -235,7 +235,7 @@ Article · Product · Recipe · FAQPage · BreadcrumbList · Event · JobPosting
 <sup>3</sup> Ahrefs is a trademark of Ahrefs Pte. Ltd., Singapore. We are not affiliated.
 </sub>
 
-**Reading guide:** if you currently use a paid on-site crawler and your workflow is *"crawl → export CSVs → analyse"*, librecrawl-mcp covers that flow inside your AI assistant for £0 with no page caps. If your workflow depends on JavaScript-rendered SPAs, that's on the [roadmap](#-roadmap) but not shipped yet — use the desktop tool for now.
+**Reading guide:** if you currently use a paid on-site crawler and your workflow is *"crawl → export CSVs → analyse"*, librecrawl-technical-seo-audit-mcp covers that flow inside your AI assistant for £0 with no page caps. If your workflow depends on JavaScript-rendered SPAs, that's on the [roadmap](#-roadmap) but not shipped yet — use the desktop tool for now.
 
 ---
 
@@ -298,7 +298,7 @@ Agent: → unzips, reads per-page.csv (filters status_4xx OR status_5xx)
 
 > **Not planned:** keyword research, backlink analysis, SERP tracking. Those are different problems with different MCP servers (DataForSEO, etc.). This tool is laser-focused on **technical on-site SEO crawling**.
 
-[Open an issue](https://github.com/adityaarsharma/librecrawl-mcp/issues/new) to bump priorities or request a check.
+[Open an issue](https://github.com/adityaarsharma/librecrawl-technical-seo-audit-mcp/issues/new) to bump priorities or request a check.
 
 ---
 
@@ -311,7 +311,7 @@ Agent: → unzips, reads per-page.csv (filters status_4xx OR status_5xx)
                              │  streamable HTTP or stdio
                              ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  librecrawl-mcp wrapper  (server.py — FastMCP, 37 tools)    │
+│  librecrawl-technical-seo-audit-mcp wrapper  (server.py — FastMCP, 37 tools)    │
 │  ┌─────────────────┐    ┌──────────────────────────────┐    │
 │  │ runner.py       │    │ external_links / schema /    │    │
 │  │ background      │    │ content_audit / extended_    │    │

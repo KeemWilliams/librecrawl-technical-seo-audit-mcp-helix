@@ -171,7 +171,7 @@ async def _validate_one(target: str, client: httpx.AsyncClient,
         return await client.request(
             method, target, timeout=timeout_s, follow_redirects=True,
             headers={
-                "User-Agent": "LibreCrawl-MCP/1.4 (External Link Validator; +https://github.com/adityaarsharma/librecrawl-mcp)",
+                "User-Agent": "LibreCrawl-MCP/1.4 (External Link Validator; +https://github.com/adityaarsharma/librecrawl-technical-seo-audit-mcp)",
                 "Accept": "text/html,*/*;q=0.5",
             },
         )

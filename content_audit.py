@@ -1,5 +1,5 @@
 """
-Content quality audit module (librecrawl-mcp v1.5).
+Content quality audit module (librecrawl-technical-seo-audit-mcp v1.5).
 
 Operates on a finished crawl's page list. LibreCrawl's per-page export does
 NOT include full body text — only title, meta description, headings, and
@@ -267,7 +267,7 @@ async def _fetch_one(url: str, client: httpx.AsyncClient,
     try:
         r = await client.get(url, timeout=timeout_s, follow_redirects=True,
                               headers={
-                                  "User-Agent": "LibreCrawl-MCP/1.5 (Content Audit; +https://github.com/adityaarsharma/librecrawl-mcp)",
+                                  "User-Agent": "LibreCrawl-MCP/1.5 (Content Audit; +https://github.com/adityaarsharma/librecrawl-technical-seo-audit-mcp)",
                                   "Accept": "text/html,*/*;q=0.5",
                               })
         if r.status_code >= 400:

@@ -1,5 +1,5 @@
 """
-Schema.org / JSON-LD structured data validator (librecrawl-mcp v2.0 easy half).
+Schema.org / JSON-LD structured data validator (librecrawl-technical-seo-audit-mcp v2.0 easy half).
 
 The existing librecrawl_schema_check / _audit tools EXTRACT JSON-LD and
 classify TYPES — they don't validate against schema.org's required-fields

@@ -1,5 +1,5 @@
 """
-Sitemap-orphan filler (librecrawl-mcp v1.6).
+Sitemap-orphan filler (librecrawl-technical-seo-audit-mcp v1.6).
 
 LibreCrawl's upstream Flask crawler accepts only a single seed URL and
 traverses internal links up to maxDepth. Sitemap URLs that are NOT reachable
@@ -32,7 +32,7 @@ from urllib.parse import urlparse
 import httpx
 
 
-USER_AGENT = "LibreCrawl-MCP/1.6 (Sitemap-Fill; +https://github.com/adityaarsharma/librecrawl-mcp)"
+USER_AGENT = "LibreCrawl-MCP/1.6 (Sitemap-Fill; +https://github.com/adityaarsharma/librecrawl-technical-seo-audit-mcp)"
 
 
 class _SEOExtractor(HTMLParser):
