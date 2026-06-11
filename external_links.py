@@ -334,7 +334,7 @@ def _write_csv(rows: list[dict], source_map: dict, skip_map: dict,
 
 def audit_external_links(pages: list, base_url: str, output_path,
                           links: list | None = None,
-                          max_workers: int = 10, timeout_seconds: float = 10.0) -> dict:
+                          max_workers: int = 16, timeout_seconds: float = 20.0) -> dict:
     """
     Public entry point. Synchronous — drives the async pool internally so callers
     (including the runner thread + MCP tool) don't need to manage asyncio.

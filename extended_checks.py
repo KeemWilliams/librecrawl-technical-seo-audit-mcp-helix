@@ -1012,9 +1012,9 @@ def _check_from_response(url: str, resp, status: int, headers: dict,
 
 def run_extended_checks(pages: list, base_url: str, output_path: Path,
                          links: list | None = None,
-                         limit: int = 250,
-                         max_workers: int = 5,
-                         timeout_seconds: float = 8.0) -> dict:
+                         limit: int = 400,
+                         max_workers: int = 8,
+                         timeout_seconds: float = 20.0) -> dict:
     """
     Run all extended checks and write findings to a single CSV.
 

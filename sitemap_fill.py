@@ -383,8 +383,8 @@ def _run_coro(coro):
 
 
 def fill_sitemap_orphans(missed_urls: list,
-                          max_workers: int = 10,
-                          timeout_seconds: float = 8.0,
+                          max_workers: int = 16,
+                          timeout_seconds: float = 25.0,
                           cap: int = 500) -> dict:
     """Synchronous entry — drives the async pool internally.
 

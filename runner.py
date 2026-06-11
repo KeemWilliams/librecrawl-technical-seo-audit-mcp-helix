@@ -261,9 +261,16 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
     if fill_enabled and pre_recon.get("sitemap_only_count", 0) > 0:
         try:
             import sitemap_fill
+            # v2.0.8: heavy-site defaults. Pages on Elementor/heavy-WP sites
+            # can be 4-5 MB each — an 8s fetch timeout silently dropped them
+            # to status 0 (theplusaddons.com: 1907/1936 sitemap URLs timed out
+            # at 8s). 25s + more workers lets heavy pages actually fetch. Both
+            # tunable per audit via settings (fetch_timeout_s / fetch_workers).
             fill_result = sitemap_fill.fill_sitemap_orphans(
                 pre_recon.get("sitemap_only", []),
-                max_workers=10, timeout_seconds=8.0, cap=fill_cap,
+                max_workers=int(settings.get("fetch_workers", 16)),
+                timeout_seconds=float(settings.get("fetch_timeout_s", 25.0)),
+                cap=fill_cap,
             )
             new_pages = fill_result.get("pages_added", []) or []
             pages = pages + new_pages
@@ -340,7 +347,8 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
         ext_csv = REPORTS_DIR / f"{domain}-{timestamp}.external-links.csv"
         ext_summary = external_links.audit_external_links(
             pages, url, ext_csv, links=links,
-            max_workers=10, timeout_seconds=10.0,
+            max_workers=int(settings.get("fetch_workers", 16)),
+            timeout_seconds=float(settings.get("fetch_timeout_s", 20.0)),
         )
         state.add_artifact(sid, "external_links_csv", ext_csv)
         state.log_event(sid, "external_links_audited", {
@@ -376,7 +384,13 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
     try:
         import content_audit
         ca_csv = REPORTS_DIR / f"{domain}-{timestamp}.content-audit.csv"
-        ca_summary = content_audit.audit_content(pages, ca_csv, limit=50)
+        # v2.0.8: limit 50 → 400 so big sites get content analysis on far
+        # more than a 50-page sample; timeout tunable for heavy pages.
+        ca_summary = content_audit.audit_content(
+            pages, ca_csv,
+            limit=int(settings.get("content_check_limit", 400)),
+            timeout_seconds=float(settings.get("fetch_timeout_s", 20.0)),
+        )
         state.add_artifact(sid, "content_audit_csv", ca_csv)
         state.log_event(sid, "content_audited", {
             "pages_audited": ca_summary.get("pages_audited", 0),
@@ -390,8 +404,12 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
     try:
         import extended_checks
         ec_csv = REPORTS_DIR / f"{domain}-{timestamp}.extended-checks.csv"
+        # v2.0.8: limit 50 → 400 + heavy-page timeout so big sites get
+        # extended checks (hreflang/schema/security/perf) on a real sample.
         ec_summary = extended_checks.run_extended_checks(
-            pages, url, ec_csv, links=links, limit=50,
+            pages, url, ec_csv, links=links,
+            limit=int(settings.get("extended_check_limit", 400)),
+            timeout_seconds=float(settings.get("fetch_timeout_s", 20.0)),
         )
         state.add_artifact(sid, "extended_checks_csv", ec_csv)
         state.log_event(sid, "extended_checks_done", {

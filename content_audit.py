@@ -320,9 +320,9 @@ def _run_coro(coro):
 
 # ── Public entry point ───────────────────────────────────────────────────────
 
-def audit_content(pages: list, output_path: Path, limit: int = 250,
-                   max_workers: int = 5,
-                   timeout_seconds: float = 8.0) -> dict:
+def audit_content(pages: list, output_path: Path, limit: int = 400,
+                   max_workers: int = 8,
+                   timeout_seconds: float = 20.0) -> dict:
     """
     Run paragraph-level content checks across the first `limit` pages of a
     crawl. Writes <output_path>.csv and returns a summary.
