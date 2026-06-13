@@ -307,6 +307,23 @@ def log_event(session_id, kind, detail=None):
         conn.close()
 
 
+def count_events(session_id, detail_match):
+    """Count events for a session whose detail equals detail_match.
+
+    v2.1.1: used by the runner's boot-recovery circuit breaker to detect a
+    session that keeps getting requeued (e.g. OOM crash loop). The requeue is
+    logged via set_status(..., detail="boot_recovery_requeue"), so we match on
+    detail, not kind.
+    """
+    conn = _connect()
+    n = conn.execute(
+        "SELECT COUNT(*) FROM events WHERE session_id = ? AND detail = ?",
+        (session_id, detail_match),
+    ).fetchone()[0]
+    conn.close()
+    return n
+
+
 def recent_events(session_id, n=20):
     conn = _connect()
     rows = conn.execute(

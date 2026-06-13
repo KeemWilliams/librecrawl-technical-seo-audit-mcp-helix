@@ -128,7 +128,7 @@ def _run_session(session: dict) -> None:
         # Hard deadline guard
         if (time.time() - started_session) > HARD_DEADLINE_SECONDS:
             state.update_session(sid, incomplete_reasons="hard_deadline_exceeded")
-            state.set_status(sid, "failed", "Hard 4-hour deadline reached")
+            state.set_status(sid, "failed", f"Hard {HARD_DEADLINE_SECONDS // 3600}-hour deadline reached")
             libreclient.stop_crawl()
             return
 
@@ -398,13 +398,19 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
     try:
         import content_audit
         ca_csv = REPORTS_DIR / f"{domain}-{timestamp}.content-audit.csv"
-        # v2.1.0: FULL COVERAGE. content_check_limit=0 (new default) → analyze
-        # EVERY crawled page's text (readability, AI-tells, boilerplate), not a
-        # sample. Bounded by len(pages) so it's exactly "all pages".
+        # v2.1.1: MEMORY-SAFE cap. content_audit loads each page's full HTML
+        # AND holds 5-word shingles across pages for boilerplate detection —
+        # on a 1900-page x 4.68 MB site that OOM-killed the process, which
+        # PM2 restarted, which re-ran the whole crawl, looping ~37x over 12h
+        # until the hard deadline. Core per-page SEO checks already cover ALL
+        # pages (cheap, from the crawl export); the deep content sample is
+        # capped at 500 to stay within memory. Tunable up via settings for
+        # operators with more RAM. 0 or unset → safe 500 default.
         _ca_raw = int(settings.get("content_check_limit", 0))
+        _ca_limit = _ca_raw if _ca_raw > 0 else 500
         ca_summary = content_audit.audit_content(
             pages, ca_csv,
-            limit=_ca_raw if _ca_raw > 0 else len(pages),
+            limit=min(_ca_limit, len(pages)),
             timeout_seconds=float(settings.get("fetch_timeout_s", 20.0)),
         )
         state.add_artifact(sid, "content_audit_csv", ca_csv)
@@ -420,13 +426,15 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
     try:
         import extended_checks
         ec_csv = REPORTS_DIR / f"{domain}-{timestamp}.extended-checks.csv"
-        # v2.1.0: FULL COVERAGE. extended_check_limit=0 (new default) → run
-        # hreflang/schema/security/perf checks on EVERY crawled page, not a
-        # sample. Bounded by len(pages).
+        # v2.1.1: MEMORY-SAFE cap (same OOM fix as content_audit). extended
+        # checks re-fetch each page's HTML for hreflang/schema/security/perf.
+        # Capped at 500 by default; tunable via extended_check_limit. Core
+        # per-page checks still cover ALL pages from the crawl export.
         _ec_raw = int(settings.get("extended_check_limit", 0))
+        _ec_limit = _ec_raw if _ec_raw > 0 else 500
         ec_summary = extended_checks.run_extended_checks(
             pages, url, ec_csv, links=links,
-            limit=_ec_raw if _ec_raw > 0 else len(pages),
+            limit=min(_ec_limit, len(pages)),
             timeout_seconds=float(settings.get("fetch_timeout_s", 20.0)),
         )
         state.add_artifact(sid, "extended_checks_csv", ec_csv)
@@ -476,12 +484,29 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
 
 # ── Worker thread ─────────────────────────────────────────────────────────────
 
+MAX_BOOT_REQUEUES = 3  # v2.1.1: a session that crashes the process this many
+                       # times is poison — fail it instead of looping forever.
+
+
 def _worker_loop():
     """Pick up queued sessions FIFO. Resume any active-but-not-running on boot."""
-    # Boot recovery — anything in non-terminal state gets re-queued.
+    # Boot recovery — anything in non-terminal state gets re-queued, BUT with a
+    # circuit breaker. v2.1.1 fix: a session whose finalize OOM-kills the
+    # process gets restarted by PM2, re-queued here, OOMs again — an infinite
+    # loop that ran ~37x over 12h on a 1900-page heavy site. Count prior
+    # boot_recovery_requeue events; past the limit, mark it failed so it can't
+    # re-poison every restart.
     for s in state.find_active_sessions():
         if s["status"] != "queued":
-            state.set_status(s["id"], "queued", "boot_recovery_requeue")
+            prior = state.count_events(s["id"], "boot_recovery_requeue")
+            if prior >= MAX_BOOT_REQUEUES:
+                state.update_session(s["id"],
+                                     incomplete_reasons="boot_requeue_limit_exceeded")
+                state.set_status(s["id"], "failed",
+                                 f"aborted after {prior} restart loops "
+                                 "(likely OOM in finalize — lower content/extended check limits)")
+            else:
+                state.set_status(s["id"], "queued", "boot_recovery_requeue")
 
     while not _shutdown.is_set():
         queued = state.find_queued_sessions()
