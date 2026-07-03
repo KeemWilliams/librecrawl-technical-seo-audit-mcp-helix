@@ -17,6 +17,7 @@ from html.parser import HTMLParser
 from urllib.parse import urlparse, unquote
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 # v2.0.3 — server instructions are surfaced to the LLM at connection time by
 # every MCP-compatible client. This means the rules below apply even when the
@@ -90,7 +91,25 @@ Contents: PDF report + 7 CSVs.
 Server forgot the session — nothing remote.
 """
 
-mcp = FastMCP("librecrawl-mcp", instructions=LIBRECRAWL_MCP_INSTRUCTIONS)
+def _csv_env(name: str, default: str) -> list[str]:
+    return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
+
+
+mcp = FastMCP(
+    "librecrawl-mcp",
+    instructions=LIBRECRAWL_MCP_INSTRUCTIONS,
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=_csv_env(
+            "MCP_ALLOWED_HOSTS",
+            "localhost:*,127.0.0.1:*,librecrawl-seo-mcp:*,tecav7wwyy43827azr5bo1xk-*:*,*.sslip.io:*",
+        ),
+        allowed_origins=_csv_env(
+            "MCP_ALLOWED_ORIGINS",
+            "http://localhost:*,http://127.0.0.1:*,http://librecrawl-seo-mcp:*,http://*.sslip.io:*,https://*.sslip.io:*",
+        ),
+    ),
+)
 
 _EXTERNAL_BASE  = os.getenv("LIBRECRAWL_BASE_URL", "").strip().rstrip("/")
 BASE            = _EXTERNAL_BASE or f"http://127.0.0.1:{os.getenv('LIBRECRAWL_PORT', '5080')}"
