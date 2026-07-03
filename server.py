@@ -95,11 +95,18 @@ def _csv_env(name: str, default: str) -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
 mcp = FastMCP(
     "librecrawl-mcp",
     instructions=LIBRECRAWL_MCP_INSTRUCTIONS,
     transport_security=TransportSecuritySettings(
-        enable_dns_rebinding_protection=True,
+        enable_dns_rebinding_protection=_bool_env("MCP_DNS_REBINDING_PROTECTION", True),
         allowed_hosts=_csv_env(
             "MCP_ALLOWED_HOSTS",
             "localhost:*,127.0.0.1:*,librecrawl-seo-mcp:*,tecav7wwyy43827azr5bo1xk-*:*,*.sslip.io:*",
