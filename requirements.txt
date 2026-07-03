@@ -1,0 +1,6 @@
+mcp
+httpx
+beautifulsoup4
+markdown
+weasyprint
+uvicorn

@@ -92,8 +92,13 @@ Server forgot the session — nothing remote.
 
 mcp = FastMCP("librecrawl-mcp", instructions=LIBRECRAWL_MCP_INSTRUCTIONS)
 
-BASE            = f"http://127.0.0.1:{os.getenv('LIBRECRAWL_PORT', '5080')}"
+_EXTERNAL_BASE  = os.getenv("LIBRECRAWL_BASE_URL", "").strip().rstrip("/")
+BASE            = _EXTERNAL_BASE or f"http://127.0.0.1:{os.getenv('LIBRECRAWL_PORT', '5080')}"
+LIBRECRAWL_EXTERNAL = bool(_EXTERNAL_BASE)
+LIBRECRAWL_USERNAME = os.getenv("LIBRECRAWL_USERNAME", "mcp-user")
+LIBRECRAWL_PASSWORD = os.getenv("LIBRECRAWL_PASSWORD", "")
 MCP_PORT        = int(os.getenv('MCP_PORT', '5081'))
+MCP_HOST        = os.getenv("MCP_HOST", "127.0.0.1")
 REPORTS_DIR     = Path(os.getenv('REPORTS_DIR', Path.home() / 'librecrawl-reports'))
 PSI_API_KEY     = os.getenv('PAGESPEED_API_KEY', '')   # Google PageSpeed Insights
 PSI_API_BASE    = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
@@ -188,7 +193,17 @@ def get_client():
     with _client_lock:
         if _client is None or _client.is_closed:
             _client = httpx.Client(timeout=httpx.Timeout(connect=15.0, read=180.0, write=30.0, pool=15.0), follow_redirects=True)  # v2.0.8: heavy sites ack start_crawl slowly
-            _client.post(f"{BASE}/api/login", json={"username": "mcp-user"}).raise_for_status()
+            payload = {"username": LIBRECRAWL_USERNAME}
+            if LIBRECRAWL_PASSWORD:
+                payload["password"] = LIBRECRAWL_PASSWORD
+            resp = _client.post(f"{BASE}/api/login", json=payload)
+            resp.raise_for_status()
+            try:
+                login = resp.json()
+            except Exception:
+                login = {}
+            if login.get("success") is False:
+                raise RuntimeError(f"LibreCrawl login failed: {login.get('message', 'unknown error')}")
         return _client
 
 
@@ -3672,6 +3687,8 @@ def _wipe_upstream_crawl_record(crawl_id: int) -> dict:
     """
     if crawl_id is None:
         return {"skipped": "no crawl_id"}
+    if LIBRECRAWL_EXTERNAL:
+        return {"skipped": "external LibreCrawl configured; direct sqlite cleanup disabled"}
     if not LIBRECRAWL_UPSTREAM_DB.exists():
         return {"skipped": f"upstream db not found at {LIBRECRAWL_UPSTREAM_DB}"}
     counts = {}
@@ -3700,6 +3717,8 @@ def _wipe_upstream_crawl_record(crawl_id: int) -> dict:
 
 def _wipe_all_upstream_crawls() -> dict:
     """Truncate upstream LibreCrawl's crawl tables entirely. Returns counts."""
+    if LIBRECRAWL_EXTERNAL:
+        return {"skipped": "external LibreCrawl configured; direct sqlite cleanup disabled"}
     if not LIBRECRAWL_UPSTREAM_DB.exists():
         return {"skipped": f"upstream db not found at {LIBRECRAWL_UPSTREAM_DB}"}
     counts = {}
@@ -3963,4 +3982,4 @@ if __name__ == "__main__":
     else:
         # HTTP/streamable mode: default for Claude Desktop + Claude Code via PM2.
         import uvicorn
-        uvicorn.run(mcp.streamable_http_app(), host="127.0.0.1", port=MCP_PORT, log_level="info")
+        uvicorn.run(mcp.streamable_http_app(), host=MCP_HOST, port=MCP_PORT, log_level="info")
